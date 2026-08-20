@@ -3,19 +3,30 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --turbo",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "db:generate": "drizzle-kit generate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
+    "ingest": "tsx --env-file=.env.local scripts/ingest.ts",
+    "seed:source": "tsx --env-file=.env.local scripts/seed-source-target.ts",
+    "test:gates": "tsx --test domain/gates.test.ts",
+    "heal": "tsx --env-file=.env.local scripts/heal-loop.ts",
+    "heal:check": "tsx --env-file=.env.local scripts/heal-check.ts"
   },
   "dependencies": {
+    "@brightdata/cli": "^0.3.5",
     "@radix-ui/react-slot": "^1.3.3",
     "@tailwindcss/postcss": "^4.1.11",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "d3-geo": "^3.1.1",
+    "drizzle-orm": "^0.45.2",
     "lucide-react": "^0.468.0",
     "next": "15.4.6",
+    "postgres": "^3.4.9",
     "react": "19.1.1",
     "react-dom": "19.1.1",
     "react-is": "19.1.1",
@@ -23,7 +34,8 @@
     "tailwind-merge": "^3.3.1",
     "tailwindcss": "^4.1.11",
     "topojson-client": "^3.1.0",
-    "world-atlas": "^2.0.2"
+    "world-atlas": "^2.0.2",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/d3-geo": "^3.1.1",
@@ -31,6 +43,9 @@
     "@types/react": "^19.0.3",
     "@types/react-dom": "^19.0.2",
     "@types/topojson-client": "^3.1.5",
+    "dotenv": "^17.4.2",
+    "drizzle-kit": "^0.31.10",
+    "tsx": "^4.23.12",
     "typescript": "^5.7.2"
   }
 }
