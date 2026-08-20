@@ -1,0 +1,1 @@
+{"collector_id":"c_msy7solmrxow00enh","name":"rs-uk-pdp","status":"done","completed_steps":["prepare_intent_analyzer","planner","collector_mainatiner","output_schema_generator","code_generator","input_schema_generator","preview_runner","preview_picker"],"view_url":"https://brightdata.com/cp/scrapers/c_msy7solmrxow00enh","created_at":"2026-08-18T05:21:01.066Z"}

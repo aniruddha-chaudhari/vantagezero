@@ -1,0 +1,39 @@
+resolved: STM32F103C8T6 / RS Online -> stock=23 GBP
+resolved: STM32F103C8T6 / element14 -> stock=90493 GBP
+error resolving STM32F103C8T6 / STMicroelectronics: Command failed: npx -y -p @brightdata/cli bdata search "STM32F103C8T6 site:www.st.com" -k REDACTED --json
+Searching google for "STM32F103C8T6 site:www.st.com"...
+Error: redirect location was rejected
+
+incident: ATMEGA328P-PU / RS Online -> RS Online output is missing a required field (mpn, in_stock_quantity, or currency)
+resolved: ATMEGA328P-PU / element14 -> stock=13163 GBP
+incident: ESP32-WROOM-32E / RS Online -> Extracted MPN "ESP32-RELAY04" does not match requested MPN "ESP32-WROOM-32E"
+incident: ESP32-WROOM-32E / element14 -> element14 output is missing a required field (manufacturer_part_number, in_stock_quantity, or currency)
+incident: LD1117S33TR / RS Online -> RS Online output is missing a required field (mpn, in_stock_quantity, or currency)
+incident: LD1117S33TR / element14 -> element14 output is missing a required field (manufacturer_part_number, in_stock_quantity, or currency)
+resolved: LD1117S33TR / STMicroelectronics -> marketingStatus=Active
+incident: LM2596S-ADJ / RS Online -> Extracted MPN "LM2596S-ADJ/NOPB" does not match requested MPN "LM2596S-ADJ"
+incident: LM2596S-ADJ / element14 -> Extracted MPN "LM2596S-ADJ/NOPB" does not match requested MPN "LM2596S-ADJ"
+unresolved: TPS54331DR / RS Online (no matching organic result)
+incident: TPS54331DR / element14 -> Price break is missing unit_price.value
+incident: LAN8720A-CP / RS Online -> RS Online output is missing a required field (mpn, in_stock_quantity, or currency)
+incident: LAN8720A-CP / element14 -> Extracted MPN "LAN8720A-CP-TR" does not match requested MPN "LAN8720A-CP"
+incident: W25Q32JVSSIQ / RS Online -> RS Online output is missing a required field (mpn, in_stock_quantity, or currency)
+unresolved: W25Q32JVSSIQ / element14 (no matching organic result)
+incident: 24LC256-I/SN / RS Online -> RS Online output is missing a required field (mpn, in_stock_quantity, or currency)
+resolved: 24LC256-I/SN / element14 -> stock=24280 GBP
+incident: SN65HVD230DR / RS Online -> RS Online output is missing a required field (mpn, in_stock_quantity, or currency)
+incident: SN65HVD230DR / element14 -> element14 output is missing a required field (manufacturer_part_number, in_stock_quantity, or currency)
+incident: MAX3232IDR / RS Online -> RS Online output is missing a required field (mpn, in_stock_quantity, or currency)
+incident: MAX3232IDR / element14 -> Extracted MPN "103990363" does not match requested MPN "MAX3232IDR"
+unresolved: USB4105-GF-A / RS Online (no matching organic result)
+incident: USB4105-GF-A / element14 -> Extracted MPN "USB4105-GF-A-120" does not match requested MPN "USB4105-GF-A"
+incident: 22-23-2021 / RS Online -> RS Online output is missing a required field (mpn, in_stock_quantity, or currency)
+resolved: 22-23-2021 / element14 -> stock=17573 GBP
+incident: ABM8-16.000MHZ-B2-T / RS Online -> RS Online output is missing a required field (mpn, in_stock_quantity, or currency)
+resolved: ABM8-16.000MHZ-B2-T / element14 -> stock=4375 GBP
+incident: BME280 / RS Online -> Extracted MPN "BME280 SHUTTLE BOARD 3.0" does not match requested MPN "BME280"
+incident: BME280 / element14 -> element14 output is missing a required field (manufacturer_part_number, in_stock_quantity, or currency)
+unresolved: PESD5V0S1BA,215 / RS Online (no matching organic result)
+unresolved: PESD5V0S1BA,215 / element14 (no matching organic result)
+
+Done. attempts=34 errors=1
