@@ -9,6 +9,12 @@ const config: ChartConfig = {
   incoming: { label: "Incoming", color: "var(--chart-2)" },
 };
 
+function compact(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(0)}k`;
+  return String(value);
+}
+
 export function IncomingVsShipChart({
   stock,
   incoming,
@@ -25,14 +31,23 @@ export function IncomingVsShipChart({
 
   return (
     <div>
-      <ChartContainer config={config} className="aspect-auto h-[140px]">
-        <BarChart data={data} layout="vertical" margin={{ left: 0, right: 16, top: 8, bottom: 0 }}>
-          <CartesianGrid horizontal={false} />
-          <XAxis type="number" tickLine={false} axisLine={false} />
-          <YAxis type="category" dataKey="label" hide />
+      <ChartContainer config={config} className="aspect-auto h-[220px]">
+        <BarChart data={data} margin={{ left: 0, right: 8, top: 8, bottom: 0 }}>
+          <CartesianGrid vertical={false} />
+          <XAxis dataKey="label" type="category" tickLine={false} axisLine={false} hide />
+          <YAxis type="number" tickLine={false} axisLine={false} width={44} tickFormatter={compact} />
           <ChartTooltip content={<ChartTooltipContent />} />
-          <Bar dataKey="available" stackId="a" fill="var(--color-available)" radius={[4, 0, 0, 4]} name="Available now" />
-          <Bar dataKey="incoming" stackId="a" fill="var(--color-incoming)" radius={[0, 4, 4, 0]} name="Incoming" />
+          {/* Stacked so total height reads as "everything that could be available", with the
+              already-on-hand portion visually distinct from what's merely inbound. */}
+          <Bar dataKey="available" stackId="a" fill="var(--color-available)" name="Available now" maxBarSize={96} />
+          <Bar
+            dataKey="incoming"
+            stackId="a"
+            fill="var(--color-incoming)"
+            radius={[4, 4, 0, 0]}
+            name="Incoming"
+            maxBarSize={96}
+          />
         </BarChart>
       </ChartContainer>
       {incoming != null && incoming > 0 ? (

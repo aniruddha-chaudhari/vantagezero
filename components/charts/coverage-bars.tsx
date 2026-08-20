@@ -1,6 +1,6 @@
 "use client";
 
-import { Bar, BarChart, CartesianGrid, ReferenceLine, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, Cell, ReferenceLine, XAxis, YAxis } from "recharts";
 
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 
@@ -18,21 +18,32 @@ export function CoverageBarsChart({ data }: { data: CoverageBarDatum[] }) {
   }));
 
   return (
-    <ChartContainer config={config} className="aspect-auto h-[280px]">
-      <BarChart data={chartData} layout="vertical" margin={{ left: 8, right: 24, top: 8, bottom: 0 }}>
-        <CartesianGrid horizontal={false} />
-        <XAxis type="number" tickLine={false} axisLine={false} />
-        <YAxis
-          type="category"
+    <ChartContainer config={config} className="aspect-auto h-[300px]">
+      <BarChart data={chartData} margin={{ left: 0, right: 8, top: 8, bottom: 56 }}>
+        <CartesianGrid vertical={false} />
+        <XAxis
           dataKey="mpn"
-          width={112}
+          type="category"
+          interval={0}
+          angle={-35}
+          textAnchor="end"
+          height={56}
           tickLine={false}
           axisLine={false}
-          tick={{ fontFamily: "monospace", fontSize: 11 }}
+          tick={{ fontFamily: "monospace", fontSize: 10 }}
         />
-        <ReferenceLine x={100} stroke="var(--destructive)" strokeDasharray="4 4" />
+        <YAxis type="number" tickLine={false} axisLine={false} width={44} tickFormatter={(v) => `${v}%`} />
+        {/* 100% is the line between "this run is covered" and "it isn't". */}
+        <ReferenceLine y={100} stroke="var(--destructive)" strokeDasharray="4 4" />
         <ChartTooltip content={<ChartTooltipContent />} />
-        <Bar dataKey="coveragePct" name="Coverage %" fill="var(--color-coveragePct)" radius={[0, 4, 4, 0]} />
+        <Bar dataKey="coveragePct" name="Coverage %" radius={[4, 4, 0, 0]}>
+          {chartData.map((d) => (
+            <Cell
+              key={d.mpn}
+              fill={d.coveragePct < 100 ? "var(--destructive)" : "var(--color-coveragePct)"}
+            />
+          ))}
+        </Bar>
       </BarChart>
     </ChartContainer>
   );

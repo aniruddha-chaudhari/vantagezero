@@ -1,8 +1,11 @@
 import { ServerCog } from "lucide-react";
 
+import { PassRateHistoryChart } from "@/components/charts/pass-rate-history";
+import { ImpactStrip } from "@/components/impact-strip";
 import { IncidentApproval } from "@/components/incident-approval";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { getPassRateHistory, getPlatformStats } from "@/db/analytics";
 import { listIncidentsForHealthScreen, listSourceHealth } from "@/db/queries";
 import { formatAge } from "@/domain/freshness";
 
@@ -19,7 +22,12 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 export default async function SourcesPage() {
-  const [collectors, incidents] = await Promise.all([listSourceHealth(), listIncidentsForHealthScreen()]);
+  const [collectors, incidents, passRate, stats] = await Promise.all([
+    listSourceHealth(),
+    listIncidentsForHealthScreen(),
+    getPassRateHistory(),
+    getPlatformStats(),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -31,6 +39,8 @@ export default async function SourcesPage() {
           for approving or rejecting an already-escalated incident.
         </p>
       </div>
+
+      <ImpactStrip stats={stats} />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {collectors.map((c) => (
@@ -79,6 +89,18 @@ export default async function SourcesPage() {
           </Card>
         ))}
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Validation pass rate over time</CardTitle>
+          <CardDescription>
+            A heal shows up here as a dip and a recovery - extraction reliability, not supply risk.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <PassRateHistoryChart points={passRate} />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

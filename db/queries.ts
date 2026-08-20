@@ -60,7 +60,7 @@ async function getLatestDistributorSnapshotsByMpn(
   return result;
 }
 
-async function getLatestLifecycleByMpn(mpns: string[]): Promise<Map<string, { marketingStatus: string }>> {
+export async function getLatestLifecycleByMpn(mpns: string[]): Promise<Map<string, { marketingStatus: string }>> {
   const result = new Map<string, { marketingStatus: string }>();
   if (mpns.length === 0) return result;
 
