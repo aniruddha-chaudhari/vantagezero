@@ -64,7 +64,7 @@ export default function Home() {
             <span className="hidden h-5 w-px bg-black/12 sm:block" />
             <div className="flex items-center gap-2.5 px-4">
               <Activity className="h-4 w-4 stroke-[1.35]" />
-              <span>Scrapers self-healing</span>
+              <span>Sources self-healing</span>
             </div>
             <span className="hidden h-5 w-px bg-black/12 sm:block" />
             <div className="flex items-center gap-2.5 px-4">

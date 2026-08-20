@@ -25,7 +25,7 @@ const workflow = [
 
 const events = [
   ["09:41:08", "Source structure changed", "Distributor product page markup shifted"],
-  ["09:41:11", "Scraper degraded", "Stock selector returned no verified value"],
+  ["09:41:11", "Source degraded", "Stock selector returned no verified value"],
   ["09:41:29", "Repair verified", "New extraction path passed evidence checks"],
   ["09:42:03", "Supply signal changed", "Lead time moved from 8 to 18 weeks"],
   ["09:42:04", "Production run recalculated", "Buildable quantity revised to 820 units"],
@@ -35,7 +35,7 @@ const principles = [
   ["Decision → why → evidence", "Every conclusion stays traceable to the observation and source that produced it."],
   ["Region-aware inventory", "Inventory from different regions stays separate so global stock does not create fake buildability."],
   ["Deterministic scoring", "Coverage, lead-time pressure, lifecycle status, and shortfall drive explicit risk."],
-  ["History that explains change", "Stock, lead time, lifecycle, scraper health, and business events remain visible as one timeline."],
+  ["History that explains change", "Stock, lead time, lifecycle, source health, and business events remain visible as one timeline."],
 ] as const;
 
 function StatusBadge({ label }: { label: string }) {
@@ -137,7 +137,7 @@ export function LandingSections() {
               </h2>
             </div>
             <p className="max-w-[580px] text-base leading-7 text-black/52 lg:justify-self-end lg:text-lg lg:leading-8">
-              Structural website changes trigger scraper repair. Semantic supply-chain changes trigger business action. Vantage keeps those problems separate.
+              Structural website changes trigger source repair. Semantic supply-chain changes trigger business action. Vantage keeps those problems separate.
             </p>
           </div>
 
