@@ -1,6 +1,8 @@
+import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 
 import { DashboardNav, DashboardSettingsLink } from "@/components/dashboard-nav";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Sidebar,
@@ -17,9 +19,9 @@ function AppSidebar() {
   return (
     <Sidebar>
       <SidebarHeader>
-        <a href="/" className="px-2 py-1 font-display text-2xl tracking-[-0.03em]">
+        <Link href="/" className="px-2 py-1 font-display text-2xl tracking-[-0.03em]">
           Vantage
-        </a>
+        </Link>
         <div className="mt-3 rounded-lg border border-dashed p-3">
           <div className="flex items-center gap-3">
             <div className="grid size-8 place-items-center rounded-md bg-primary font-mono text-[11px] font-semibold text-primary-foreground">
@@ -75,6 +77,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <p className="text-sm font-semibold tracking-[-0.01em]">Your builds</p>
             </div>
           </div>
+          <ThemeToggle />
         </header>
         <div className="mx-auto w-full max-w-[1540px] space-y-6 p-4 sm:p-6 lg:p-8">{children}</div>
       </SidebarInset>
