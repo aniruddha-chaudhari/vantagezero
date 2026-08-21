@@ -18,8 +18,9 @@ import {
 function AppSidebar() {
   return (
     <Sidebar>
+      <SidebarTrigger className="absolute right-2 top-3 z-10" />
       <SidebarHeader>
-        <Link href="/" className="px-2 py-1 font-display text-2xl tracking-[-0.03em]">
+        <Link href="/" className="px-2 py-1 text-xl font-semibold tracking-tight">
           Vantage
         </Link>
         <div className="mt-3 rounded-lg border border-dashed p-3">
@@ -45,10 +46,7 @@ function AppSidebar() {
         <Card>
           <CardContent className="p-3">
             <div className="flex items-center gap-2 text-xs font-medium">
-              <span className="relative flex size-2">
-                <span className="absolute inline-flex size-full animate-ping rounded-full bg-chart-3 opacity-60" />
-                <span className="relative inline-flex size-2 rounded-full bg-chart-3" />
-              </span>
+              <span className="size-1.5 rounded-full bg-chart-3" />
               Live data, not a demo
             </div>
             <p className="mt-1.5 text-[10px] leading-4 text-muted-foreground">
@@ -68,14 +66,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <AppSidebar />
       <SidebarInset>
         <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b bg-background/95 px-4 backdrop-blur sm:px-6 lg:px-8">
-          <div className="flex items-center gap-3">
-            <SidebarTrigger />
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                Vantage / Buildability
-              </p>
-              <p className="text-sm font-semibold tracking-[-0.01em]">Your builds</p>
-            </div>
+          <div>
+            <p className="text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
+              Vantage / Buildability
+            </p>
+            <p className="text-sm font-semibold">Your builds</p>
           </div>
           <ThemeToggle />
         </header>

@@ -29,9 +29,8 @@ export default async function CatalogPage() {
   return (
     <div className="space-y-6">
       <div>
-        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Buildability</p>
-        <h1 className="mt-2 font-display text-4xl tracking-[-0.04em]">Tracked catalog</h1>
-        <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
+        <h1 className="text-2xl font-semibold tracking-tight sm:text-[28px]">Tracked catalog</h1>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
           Every part Vantage currently observes, with live stock summed only across storefronts
           in the same region and entry-tier pricing shown in each source&apos;s own currency.
         </p>
@@ -70,7 +69,7 @@ export default async function CatalogPage() {
                     <div className="space-y-1.5">
                       {entry.stockByRegion.map((pool) => (
                         <div key={pool.region}>
-                          <p className="font-display text-2xl leading-none tracking-[-0.03em] tabular-nums">
+                          <p className="text-xl font-semibold leading-none tracking-tight tabular-nums">
                             {pool.stock.toLocaleString()}
                           </p>
                           <p className="mt-0.5 text-[10px] text-muted-foreground">

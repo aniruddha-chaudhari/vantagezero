@@ -94,7 +94,7 @@ export default async function ComponentDetailPage({
             {regionTotals.map((r, i) => (
               <div key={r.region}>
                 <CardTitle
-                  className={i === 0 ? "font-display text-5xl tracking-[-0.04em]" : "font-display text-2xl tracking-[-0.03em] text-muted-foreground"}
+                  className={i === 0 ? "text-4xl font-semibold tracking-tight" : "text-xl font-semibold tracking-tight text-muted-foreground"}
                 >
                   {r.stock.toLocaleString()}
                 </CardTitle>
