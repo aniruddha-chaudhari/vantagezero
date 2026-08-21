@@ -194,19 +194,27 @@ export function BuildabilityDial({ builds }: { builds: DialBuild[] }) {
             </g>
 
             {!reduceMotion && (
-              <motion.g
+              // A native SMIL animateTransform, not Motion's CSS-based `rotate` - CSS
+              // transform-origin on SVG elements depends on transform-box defaults that vary
+              // across browsers, so a CSS rotation can pivot around the wrong point on some
+              // engines. rotate(angle, cx, cy) always rotates in pure SVG user-space around
+              // the exact point given, with no such ambiguity.
+              <path
                 aria-hidden="true"
-                style={{ transformOrigin: `${CENTER}px ${CENTER}px` }}
-                animate={{ rotate: 360 }}
-                transition={{ repeat: Infinity, duration: SWEEP_DURATION, ease: "linear" }}
+                d={`M ${CENTER} ${CENTER} L ${CENTER} ${CENTER - BEZEL_RADIUS} A ${BEZEL_RADIUS} ${BEZEL_RADIUS} 0 0 1 ${
+                  polar(BEZEL_RADIUS, 0.16).x
+                } ${polar(BEZEL_RADIUS, 0.16).y} Z`}
+                fill="url(#dial-sweep)"
               >
-                <path
-                  d={`M ${CENTER} ${CENTER} L ${CENTER} ${CENTER - BEZEL_RADIUS} A ${BEZEL_RADIUS} ${BEZEL_RADIUS} 0 0 1 ${
-                    polar(BEZEL_RADIUS, 0.16).x
-                  } ${polar(BEZEL_RADIUS, 0.16).y} Z`}
-                  fill="url(#dial-sweep)"
+                <animateTransform
+                  attributeName="transform"
+                  type="rotate"
+                  from={`0 ${CENTER} ${CENTER}`}
+                  to={`360 ${CENTER} ${CENTER}`}
+                  dur={`${SWEEP_DURATION}s`}
+                  repeatCount="indefinite"
                 />
-              </motion.g>
+              </path>
             )}
 
             {/* Tracks. */}
@@ -290,7 +298,7 @@ export function BuildabilityDial({ builds }: { builds: DialBuild[] }) {
                     transition={
                       reduceMotion ? { duration: 0 } : { duration: 0.4, ease: [0.16, 1, 0.3, 1], delay: 0.6 + order * 0.11 }
                     }
-                    style={{ transformOrigin: `${p.x}px ${p.y}px` }}
+                    style={{ originX: `${p.x}px`, originY: `${p.y}px` }}
                   >
                     <circle cx={p.x} cy={p.y} r={RING_WIDTH / 2 + 3.5} fill="var(--card)" />
                     <circle cx={p.x} cy={p.y} r={4} fill={tone.stroke} />
