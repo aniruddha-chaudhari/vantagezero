@@ -17,14 +17,22 @@ import { formatAge, renderStateForObservation } from "@/domain/freshness";
 
 type BomItemRow = typeof bomItems.$inferSelect;
 
-/** Sum of latest-valid stock across every distributor source_target sharing an MPN. */
-async function getLatestDistributorSnapshotsByMpn(
-  mpns: string[],
-): Promise<Map<string, { stock: number; leadTimeWeeks: number | null; imageUrl: string | null; observedAt: Date | null }>> {
-  const result = new Map<
-    string,
-    { stock: number; leadTimeWeeks: number | null; imageUrl: string | null; observedAt: Date | null }
-  >();
+interface RegionStock {
+  region: string;
+  stock: number;
+  leadTimeWeeks: number | null;
+  imageUrl: string | null;
+  observedAt: Date | null;
+}
+
+/**
+ * Latest-valid stock per MPN, grouped by region - never summed across regions (master-plan
+ * §5, same rule `listCatalog` already follows). A UK pool and an India pool for the same MPN
+ * stay two separate numbers. Sorted largest pool first per MPN, so index 0 is the pool the
+ * rest of the app treats as "primary" when it needs a single figure.
+ */
+async function getLatestDistributorSnapshotsByMpn(mpns: string[]): Promise<Map<string, RegionStock[]>> {
+  const result = new Map<string, RegionStock[]>();
   if (mpns.length === 0) return result;
 
   const targets = await db
@@ -48,15 +56,30 @@ async function getLatestDistributorSnapshotsByMpn(
   for (const target of targets) {
     const latest = latestBySourceTarget.get(target.id);
     if (!latest) continue; // this source has never produced a valid observation - contributes nothing, not zero
-    const existing = result.get(target.mpn) ?? { stock: 0, leadTimeWeeks: null, imageUrl: null, observedAt: null };
-    existing.stock += latest.stock;
-    if (latest.leadTimeWeeks != null) {
-      existing.leadTimeWeeks = existing.leadTimeWeeks == null ? latest.leadTimeWeeks : Math.max(existing.leadTimeWeeks, latest.leadTimeWeeks);
+
+    const regionLabel = target.region ?? "unspecified";
+    const pools = result.get(target.mpn) ?? [];
+    const pool = pools.find((p) => p.region === regionLabel);
+    if (pool) {
+      pool.stock += latest.stock;
+      if (latest.leadTimeWeeks != null) {
+        pool.leadTimeWeeks = pool.leadTimeWeeks == null ? latest.leadTimeWeeks : Math.max(pool.leadTimeWeeks, latest.leadTimeWeeks);
+      }
+      if (!pool.imageUrl && latest.imageUrl) pool.imageUrl = latest.imageUrl;
+      if (!pool.observedAt || latest.observedAt > pool.observedAt) pool.observedAt = latest.observedAt;
+    } else {
+      pools.push({
+        region: regionLabel,
+        stock: latest.stock,
+        leadTimeWeeks: latest.leadTimeWeeks,
+        imageUrl: latest.imageUrl,
+        observedAt: latest.observedAt,
+      });
     }
-    if (!existing.imageUrl && latest.imageUrl) existing.imageUrl = latest.imageUrl;
-    if (!existing.observedAt || latest.observedAt > existing.observedAt) existing.observedAt = latest.observedAt;
-    result.set(target.mpn, existing);
+    result.set(target.mpn, pools);
   }
+
+  for (const pools of result.values()) pools.sort((a, b) => b.stock - a.stock);
   return result;
 }
 
@@ -89,45 +112,75 @@ export async function getLatestLifecycleByMpn(mpns: string[]): Promise<Map<strin
   return result;
 }
 
+/**
+ * Builds one BOM line's buildability against a single "primary" region (the one with the
+ * most observed stock) - never a cross-region sum. Any other region this MPN is tracked in
+ * is carried alongside as `otherRegions`, visible rather than silently dropped, so a UK-only
+ * build never looks worse (or better) than it is because of India stock it can't actually use.
+ */
+function partFromLookups(
+  item: BomItemRow,
+  plannedBuildQty: number,
+  stockByMpn: Map<string, RegionStock[]>,
+  lifecycleByMpn: Map<string, { marketingStatus: string }>,
+) {
+  const regions = stockByMpn.get(item.mpn) ?? [];
+  const [primary, ...rest] = regions;
+  const lifecycle = lifecycleByMpn.get(item.mpn);
+  const input: PartInput = {
+    mpn: item.mpn,
+    qtyPerUnit: item.qtyPerUnit,
+    monitored: item.monitored,
+    criticality: item.criticality,
+    observedStock: primary ? primary.stock : null,
+    leadTimeWeeks: primary?.leadTimeWeeks ?? null,
+    marketingStatus: lifecycle?.marketingStatus ?? null,
+  };
+  return {
+    ...computePartBuildability(plannedBuildQty, input),
+    imageUrl: primary?.imageUrl ?? null,
+    observedAt: primary?.observedAt ?? null,
+    freshnessState: primary?.observedAt ? renderStateForObservation(primary.observedAt) : null,
+    region: primary?.region ?? null,
+    otherRegions: rest.map((r) => ({ region: r.region, stock: r.stock })),
+  };
+}
+
 async function buildPartsForBom(bomItemRows: BomItemRow[], plannedBuildQty: number) {
   const mpns = bomItemRows.map((b) => b.mpn);
   const [stockByMpn, lifecycleByMpn] = await Promise.all([
     getLatestDistributorSnapshotsByMpn(mpns),
     getLatestLifecycleByMpn(mpns),
   ]);
-
-  return bomItemRows.map((item) => {
-    const stockInfo = stockByMpn.get(item.mpn);
-    const lifecycle = lifecycleByMpn.get(item.mpn);
-    const input: PartInput = {
-      mpn: item.mpn,
-      qtyPerUnit: item.qtyPerUnit,
-      monitored: item.monitored,
-      criticality: item.criticality,
-      observedStock: stockInfo ? stockInfo.stock : null,
-      leadTimeWeeks: stockInfo?.leadTimeWeeks ?? null,
-      marketingStatus: lifecycle?.marketingStatus ?? null,
-    };
-    return {
-      ...computePartBuildability(plannedBuildQty, input),
-      imageUrl: stockInfo?.imageUrl ?? null,
-      observedAt: stockInfo?.observedAt ?? null,
-      freshnessState: stockInfo?.observedAt ? renderStateForObservation(stockInfo.observedAt) : null,
-    };
-  });
+  return bomItemRows.map((item) => partFromLookups(item, plannedBuildQty, stockByMpn, lifecycleByMpn));
 }
 
 export async function listProductsForSession(sessionId: string) {
   const rows = await db.select().from(products).where(eq(products.sessionId, sessionId)).orderBy(desc(products.createdAt));
+  if (rows.length === 0) return [];
 
-  const results = [];
-  for (const product of rows) {
-    const items = await db.select().from(bomItems).where(eq(bomItems.productId, product.id));
-    const parts = await buildPartsForBom(items, product.plannedBuildQty);
-    const buildability = computeProductBuildability(product.plannedBuildQty, parts);
-    results.push({ product, buildability });
+  // One batched lookup for every build in the workspace instead of one round-trip per build.
+  const productIds = rows.map((p) => p.id);
+  const allItems = await db.select().from(bomItems).where(inArray(bomItems.productId, productIds));
+  const itemsByProduct = new Map<string, BomItemRow[]>();
+  for (const item of allItems) {
+    const list = itemsByProduct.get(item.productId) ?? [];
+    list.push(item);
+    itemsByProduct.set(item.productId, list);
   }
-  return results;
+
+  const allMpns = [...new Set(allItems.map((i) => i.mpn))];
+  const [stockByMpn, lifecycleByMpn] = await Promise.all([
+    getLatestDistributorSnapshotsByMpn(allMpns),
+    getLatestLifecycleByMpn(allMpns),
+  ]);
+
+  return rows.map((product) => {
+    const items = itemsByProduct.get(product.id) ?? [];
+    const parts = items.map((item) => partFromLookups(item, product.plannedBuildQty, stockByMpn, lifecycleByMpn));
+    const buildability = computeProductBuildability(product.plannedBuildQty, parts);
+    return { product, buildability };
+  });
 }
 
 export async function getProductDetail(productId: string, sessionId: string) {
@@ -138,9 +191,18 @@ export async function getProductDetail(productId: string, sessionId: string) {
   if (!product) return null;
 
   const items = await db.select().from(bomItems).where(eq(bomItems.productId, product.id));
-  const parts = await buildPartsForBom(items, product.plannedBuildQty);
+  const [rawParts, singleSourceMpns] = await Promise.all([
+    buildPartsForBom(items, product.plannedBuildQty),
+    getSingleSourceMpns(items.filter((i) => i.monitored).map((i) => i.mpn)),
+  ]);
+  const parts = rawParts.map((p) => ({ ...p, singleSourced: p.monitored && singleSourceMpns.has(p.mpn) }));
   const buildability = computeProductBuildability(product.plannedBuildQty, parts);
-  return { product, parts, buildability };
+  return {
+    product,
+    parts,
+    buildability,
+    singleSourcedCount: parts.filter((p) => p.singleSourced).length,
+  };
 }
 
 export interface NewProductPart {
@@ -426,6 +488,22 @@ export async function listSourceHealth(): Promise<CollectorHealth[]> {
   }
 
   return results;
+}
+
+/** MPNs tracked on exactly one distributor - the top procurement risk a BOM can carry. */
+export async function getSingleSourceMpns(mpns: string[]): Promise<Set<string>> {
+  if (mpns.length === 0) return new Set();
+  const targets = await db
+    .select({ mpn: sourceTargets.mpn })
+    .from(sourceTargets)
+    .where(and(inArray(sourceTargets.mpn, mpns), eq(sourceTargets.sourceType, "distributor")));
+
+  const counts = new Map<string, number>();
+  for (const t of targets) counts.set(t.mpn, (counts.get(t.mpn) ?? 0) + 1);
+
+  const single = new Set<string>();
+  for (const [mpn, count] of counts) if (count === 1) single.add(mpn);
+  return single;
 }
 
 export async function listIncidentsForHealthScreen(limit = 50) {

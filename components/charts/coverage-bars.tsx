@@ -14,7 +14,11 @@ const config: ChartConfig = { coveragePct: { label: "Coverage %", color: "var(--
 export function CoverageBarsChart({ data }: { data: CoverageBarDatum[] }) {
   const chartData = data.map((d) => ({
     mpn: d.mpn,
-    coveragePct: d.coverageRatio == null ? 0 : Math.round(d.coverageRatio * 100),
+    // null (no observation yet) stays null - Recharts draws no bar rather than a fabricated
+    // 0% one, which would be indistinguishable from a genuinely empty part. Surplus stock is
+    // clamped to 100 here purely so one well-stocked part can't blow out the shared Y-axis
+    // and flatten every other bar - the real, unclamped ratio is still shown as text elsewhere.
+    coveragePct: d.coverageRatio == null ? null : Math.min(100, Math.round(d.coverageRatio * 100)),
   }));
 
   return (
@@ -40,7 +44,7 @@ export function CoverageBarsChart({ data }: { data: CoverageBarDatum[] }) {
           {chartData.map((d) => (
             <Cell
               key={d.mpn}
-              fill={d.coveragePct < 100 ? "var(--destructive)" : "var(--color-coveragePct)"}
+              fill={d.coveragePct != null && d.coveragePct < 100 ? "var(--destructive)" : "var(--color-coveragePct)"}
             />
           ))}
         </Bar>
