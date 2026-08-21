@@ -1,5 +1,24 @@
 export type ChangeSeverity = "low" | "warning" | "medium" | "high" | "critical";
 
+/**
+ * Every ChangeEvent's before/after carries exactly one matching key (see the detectors
+ * below), so a generic "before → after" render works for all of them without the caller
+ * needing to know the event's shape. Returns null rather than guessing if the stored JSON
+ * doesn't look like that - the UI falls back to the plain message in that case.
+ */
+export function formatChangeDiff(before: unknown, after: unknown): string | null {
+  if (typeof before !== "object" || before === null) return null;
+  if (typeof after !== "object" || after === null) return null;
+  const beforeObj = before as Record<string, unknown>;
+  const afterObj = after as Record<string, unknown>;
+  const key = Object.keys(afterObj)[0];
+  if (!key || !(key in beforeObj)) return null;
+  const b = beforeObj[key];
+  const a = afterObj[key];
+  if (b == null || a == null || typeof b === "object" || typeof a === "object") return null;
+  return `${b} → ${a}`;
+}
+
 export interface ChangeEvent {
   eventType: string;
   severity: ChangeSeverity;
