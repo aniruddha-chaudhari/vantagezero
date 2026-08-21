@@ -104,9 +104,9 @@ export default async function PricingPage({
 
                 <div className="space-y-4">
                   {saving > 0 && cheapest && (
-                    <Card className="border-chart-2/25 bg-chart-1/[0.06]">
+                    <Card className="border-chart-3/25 bg-chart-3/[0.06]">
                       <CardContent className="p-4">
-                        <div className="flex items-center gap-2 text-chart-4">
+                        <div className="flex items-center gap-2 text-chart-3">
                           <TrendingDown className="size-4" />
                           <p className="text-xs font-semibold uppercase tracking-wide">Cheapest at this quantity</p>
                         </div>
@@ -135,7 +135,7 @@ export default async function PricingPage({
                               {c.region ? ` · ${c.region}` : ""}
                             </p>
                             {c.stock >= qty ? (
-                              <Badge variant="outline" className="border-chart-2/25 bg-chart-1/10 text-[10px] text-chart-4">
+                              <Badge variant="outline" className="border-chart-3/25 bg-chart-3/10 text-[10px] text-chart-3">
                                 covers qty
                               </Badge>
                             ) : (

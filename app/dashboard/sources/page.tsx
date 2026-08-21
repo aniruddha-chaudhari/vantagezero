@@ -15,7 +15,7 @@ function StatusBadge({ status }: { status: string }) {
   if (status === "awaiting_approval") return <Badge variant="destructive">awaiting approval</Badge>;
   if (status === "rejected") return <Badge variant="destructive">rejected</Badge>;
   return (
-    <Badge variant="outline" className="border-chart-2/25 bg-chart-1/10 text-chart-4">
+    <Badge variant="outline" className="border-chart-3/25 bg-chart-3/10 text-chart-3">
       resolved
     </Badge>
   );
@@ -51,7 +51,7 @@ export default async function SourcesPage() {
                 {c.openIncidentCount > 0 ? (
                   <Badge variant="destructive">{c.openIncidentCount} open</Badge>
                 ) : (
-                  <Badge variant="outline" className="border-chart-2/25 bg-chart-1/10 text-chart-4">
+                  <Badge variant="outline" className="border-chart-3/25 bg-chart-3/10 text-chart-3">
                     healthy
                   </Badge>
                 )}
