@@ -6,11 +6,21 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { listCatalog } from "@/db/analytics";
 import { formatAge } from "@/domain/freshness";
+import { lifecycleRisk } from "@/domain/risk";
 
 function formatPrice(unitPrice: number, currency: string): string {
   const symbol = currency === "GBP" ? "£" : currency === "INR" ? "₹" : currency === "USD" ? "$" : "";
   const digits = unitPrice < 1 ? 3 : 2;
   return symbol ? `${symbol}${unitPrice.toFixed(digits)}` : `${unitPrice.toFixed(digits)} ${currency}`;
+}
+
+/** Same tone a marketing status carries everywhere else - never a flat "looks fine" green. */
+function marketingStatusClass(marketingStatus: string): string {
+  const risk = lifecycleRisk(marketingStatus);
+  if (risk === "low") return "border-chart-3/25 bg-chart-3/10 text-chart-3";
+  if (risk === "medium") return "border-chart-4/25 bg-chart-4/10 text-chart-4";
+  if (risk === "high" || risk === "critical") return "border-destructive/25 bg-destructive/10 text-destructive";
+  return "";
 }
 
 export default async function CatalogPage() {
@@ -84,7 +94,7 @@ export default async function CatalogPage() {
 
                   <div className="flex flex-wrap items-center gap-1.5">
                     {entry.marketingStatus && (
-                      <Badge variant="outline" className="border-chart-2/25 bg-chart-1/10 text-[10px] text-chart-4">
+                      <Badge variant="outline" className={`text-[10px] ${marketingStatusClass(entry.marketingStatus)}`}>
                         {entry.marketingStatus}
                       </Badge>
                     )}
