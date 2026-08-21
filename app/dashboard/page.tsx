@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Boxes, CalendarClock, TriangleAlert } from "lucide-react";
 
+import { listCatalog } from "@/db/analytics";
 import { listProductsForSession, listRecentEvents } from "@/db/queries";
 import { formatChangeDiff } from "@/domain/changes";
 import { readSessionId } from "@/lib/session";
@@ -9,6 +10,7 @@ import { BuildabilityDial } from "@/components/buildability-dial";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { RegionSupplyMap, type RegionSupplyStat } from "@/components/region-supply-map";
 
 const SEVERITY_DOT: Record<string, string> = {
   critical: "bg-destructive",
@@ -35,10 +37,24 @@ function daysUntil(shipDate: string): number {
 
 export default async function OverviewPage() {
   const sessionId = await readSessionId();
-  const [builds, events] = await Promise.all([
+  const [builds, events, catalog] = await Promise.all([
     sessionId ? listProductsForSession(sessionId) : Promise.resolve([]),
     sessionId ? listRecentEvents(sessionId) : Promise.resolve([]),
+    listCatalog(),
   ]);
+
+  // Sum only within a region, never across - the same rule listCatalog itself already follows,
+  // just rolled up one level (across parts instead of within one part).
+  const regionStatsByRegion = new Map<string, RegionSupplyStat>();
+  for (const entry of catalog) {
+    for (const pool of entry.stockByRegion) {
+      const stat = regionStatsByRegion.get(pool.region) ?? { region: pool.region, totalStock: 0, partCount: 0 };
+      stat.totalStock += pool.stock;
+      stat.partCount += 1;
+      regionStatsByRegion.set(pool.region, stat);
+    }
+  }
+  const regionStats = [...regionStatsByRegion.values()];
 
   if (builds.length === 0) {
     return (
@@ -200,6 +216,8 @@ export default async function OverviewPage() {
           );
         })}
       </div>
+
+      <RegionSupplyMap regions={regionStats} />
 
       <Card>
         <CardHeader>
