@@ -7,6 +7,7 @@ import { CircleAlert, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { DesignWizard } from "@/components/design-wizard";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -74,6 +75,7 @@ function CriticalityBadge({ value }: { value?: ParsedPart["criticality"] }) {
 
 export default function NewBuildPage() {
   const router = useRouter();
+  const [mode, setMode] = useState<"manual" | "guided">("manual");
   const [name, setName] = useState("");
   const [plannedBuildQty, setPlannedBuildQty] = useState("1000");
   const [shipDate, setShipDate] = useState("");
@@ -117,15 +119,38 @@ export default function NewBuildPage() {
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       <div>
-        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Buildability</p>
-        <h1 className="mt-2 font-display text-4xl tracking-[-0.04em]">New build</h1>
-        <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
-          Parts resolve against Vantage&apos;s tracked catalog. A part not yet tracked still gets
-          added to the build - it just renders <span className="font-mono">— not tracked</span>{" "}
-          until a source exists for it.
+        <h1 className="text-2xl font-semibold tracking-tight sm:text-[28px]">New build</h1>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+          {mode === "manual"
+            ? "Parts resolve against Vantage's tracked catalog. A part not yet tracked still gets added to the build - it just renders — not tracked until a source exists for it."
+            : "Describe what you're building and Vantage will draft component categories, matching against the tracked catalog where it can. You approve every part before anything is created."}
         </p>
+
+        <div className="mt-5 inline-flex rounded-lg border bg-secondary/40 p-1">
+          <button
+            type="button"
+            onClick={() => setMode("manual")}
+            className={`rounded-md px-3.5 py-1.5 text-xs font-medium transition-colors ${
+              mode === "manual" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            I have a BOM
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode("guided")}
+            className={`rounded-md px-3.5 py-1.5 text-xs font-medium transition-colors ${
+              mode === "guided" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Help me choose parts
+          </button>
+        </div>
       </div>
 
+      {mode === "guided" ? (
+        <DesignWizard />
+      ) : (
       <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-[1fr_340px] lg:items-start">
         <Card>
           <CardHeader>
@@ -253,6 +278,7 @@ export default function NewBuildPage() {
           </Card>
         </div>
       </form>
+      )}
     </div>
   );
 }
