@@ -32,9 +32,8 @@ export default async function SourcesPage() {
   return (
     <div className="space-y-6">
       <div>
-        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Buildability</p>
-        <h1 className="mt-2 font-display text-4xl tracking-[-0.04em]">Source health</h1>
-        <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
+        <h1 className="text-2xl font-semibold tracking-tight sm:text-[28px]">Source health</h1>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
           Extraction health is separate from supply-chain risk - this screen is read-only except
           for approving or rejecting an already-escalated incident.
         </p>

@@ -78,9 +78,8 @@ export default async function OverviewPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Buildability</p>
-          <h1 className="mt-2 font-display text-4xl tracking-[-0.04em] sm:text-5xl">Overview</h1>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
+          <h1 className="text-2xl font-semibold tracking-tight sm:text-[28px]">Overview</h1>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
             Which build needs you today. Decisions only - stock, pricing and lead times live on
             the build and component screens.
           </p>
@@ -126,7 +125,7 @@ export default async function OverviewPage() {
           <div key={kpi.label} className="p-4 sm:p-5">
             <p className="text-[10px] font-semibold uppercase tracking-[0.11em] text-muted-foreground">{kpi.label}</p>
             <p
-              className={`mt-2 font-display text-3xl tracking-[-0.03em] tabular-nums ${kpi.alarm ? "text-destructive" : ""}`}
+              className={`mt-1.5 text-2xl font-semibold tracking-tight tabular-nums ${kpi.alarm ? "text-destructive" : ""}`}
             >
               {kpi.value}
             </p>
@@ -153,7 +152,7 @@ export default async function OverviewPage() {
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div>
-                    <p className="font-display text-3xl leading-none tracking-[-0.035em] tabular-nums">
+                    <p className="text-2xl font-semibold leading-none tracking-tight tabular-nums">
                       {buildable?.toLocaleString() ?? "—"}
                       <span className="ml-1.5 text-sm font-medium text-muted-foreground">
                         / {product.plannedBuildQty.toLocaleString()} units

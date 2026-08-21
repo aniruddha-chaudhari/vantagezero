@@ -41,9 +41,8 @@ export default async function PricingPage({
   return (
     <div className="space-y-6">
       <div>
-        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Buildability</p>
-        <h1 className="mt-2 font-display text-4xl tracking-[-0.04em]">Price comparison</h1>
-        <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
+        <h1 className="text-2xl font-semibold tracking-tight sm:text-[28px]">Price comparison</h1>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
           Real observed price ladders per supplier, and what each would actually charge at your
           build quantity. Prices are never converted between currencies - each is shown in the
           currency that source reported.
@@ -110,7 +109,7 @@ export default async function PricingPage({
                           <TrendingDown className="size-4" />
                           <p className="text-xs font-semibold uppercase tracking-wide">Cheapest at this quantity</p>
                         </div>
-                        <p className="mt-2 font-display text-3xl tracking-[-0.03em] tabular-nums">
+                        <p className="mt-2 text-2xl font-semibold tracking-tight tabular-nums">
                           {money(cheapest.lineTotalAtQty!, currency)}
                         </p>
                         <p className="mt-1 text-xs text-muted-foreground">

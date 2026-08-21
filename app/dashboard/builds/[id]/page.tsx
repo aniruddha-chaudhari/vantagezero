@@ -58,7 +58,7 @@ export default async function BuildDetailPage({ params }: { params: Promise<{ id
             </Badge>
           )}
         </div>
-        <h1 className="mt-3 font-display text-4xl tracking-[-0.04em]">{product.name}</h1>
+        <h1 className="mt-3 text-2xl font-semibold tracking-tight sm:text-[28px]">{product.name}</h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
           Planned run of {product.plannedBuildQty.toLocaleString()} units
           {product.shipDate && ` · shipping ${product.shipDate}`}.
@@ -71,9 +71,9 @@ export default async function BuildDetailPage({ params }: { params: Promise<{ id
             <CardDescription className="text-[11px] font-semibold uppercase tracking-[0.14em]">
               Decision · buildable now
             </CardDescription>
-            <CardTitle className="mt-2 font-display text-5xl tracking-[-0.045em] sm:text-6xl">
+            <CardTitle className="mt-2 text-4xl font-semibold tracking-tight tabular-nums sm:text-5xl">
               {buildability.productBuildableUnits?.toLocaleString() ?? "—"}{" "}
-              <span className="text-lg font-sans font-medium text-muted-foreground">
+              <span className="text-lg font-medium text-muted-foreground">
                 / {product.plannedBuildQty.toLocaleString()} units
               </span>
             </CardTitle>
@@ -165,7 +165,7 @@ export default async function BuildDetailPage({ params }: { params: Promise<{ id
                   <p className="text-[10px] font-semibold uppercase tracking-[0.11em] text-muted-foreground">
                     Total in {group.currency}
                   </p>
-                  <p className="mt-1.5 font-display text-3xl tracking-[-0.035em] tabular-nums">
+                  <p className="mt-1.5 text-2xl font-semibold tracking-tight tabular-nums">
                     {money(group.total, group.currency)}
                   </p>
                   <p className="mt-1 text-[11px] text-muted-foreground">
