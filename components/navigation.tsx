@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { Menu, X } from "lucide-react";
 
+import { ThemeToggle } from "@/components/theme-toggle";
+
 const navLinks = [
   { name: "Product", href: "#product" },
   { name: "How it works", href: "#how-it-works" },
@@ -30,7 +32,7 @@ export function Navigation() {
       <nav
         className={`mx-auto transition-[max-width,background-color,box-shadow,border-radius] duration-500 ease-out ${
           isScrolled || isMobileMenuOpen
-            ? "max-w-[1240px] rounded-xl bg-white/92 shadow-[0_12px_42px_rgba(0,0,0,0.055)] backdrop-blur-xl"
+            ? "max-w-[1240px] rounded-xl bg-white/92 shadow-[0_12px_42px_rgba(0,0,0,0.055)] backdrop-blur-xl dark:bg-black/80 dark:shadow-[0_12px_42px_rgba(0,0,0,0.35)]"
             : "max-w-[1500px] bg-transparent shadow-none"
         }`}
       >
@@ -39,7 +41,7 @@ export function Navigation() {
             isScrolled ? "h-14" : "h-[88px]"
           }`}
         >
-          <a href="#" className="text-[23px] font-semibold tracking-[-0.045em] text-black sm:text-[25px]">
+          <a href="#" className="text-[23px] font-semibold tracking-[-0.045em] text-black dark:text-white sm:text-[25px]">
             Vantage
           </a>
 
@@ -50,18 +52,19 @@ export function Navigation() {
                 href={link.href}
                 target={link.name === "GitHub" ? "_blank" : undefined}
                 rel={link.name === "GitHub" ? "noreferrer" : undefined}
-                className="group relative text-sm font-medium tracking-[-0.015em] text-black/62 transition-colors duration-300 hover:text-black"
+                className="group relative text-sm font-medium tracking-[-0.015em] text-black/62 transition-colors duration-300 hover:text-black dark:text-white/62 dark:hover:text-white"
               >
                 {link.name}
-                <span className="absolute -bottom-1.5 left-0 h-px w-0 bg-black transition-all duration-300 group-hover:w-full" />
+                <span className="absolute -bottom-1.5 left-0 h-px w-0 bg-black transition-all duration-300 group-hover:w-full dark:bg-white" />
               </a>
             ))}
           </div>
 
-          <div className="hidden md:flex">
+          <div className="hidden items-center gap-3 md:flex">
+            <ThemeToggle />
             <a
               href="/dashboard"
-              className={`inline-flex items-center justify-center bg-black font-medium text-white transition-[height,padding,border-radius,font-size,transform,background-color] duration-500 ease-out hover:-translate-y-px hover:bg-black/88 ${
+              className={`inline-flex items-center justify-center bg-black font-medium text-white transition-[height,padding,border-radius,font-size,transform,background-color] duration-500 ease-out hover:-translate-y-px hover:bg-black/88 dark:bg-white dark:text-black dark:hover:bg-white/88 ${
                 isScrolled
                   ? "h-9 rounded-lg px-5 text-xs"
                   : "h-11 rounded-[10px] px-7 text-sm"
@@ -71,23 +74,26 @@ export function Navigation() {
             </a>
           </div>
 
-          <button
-            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="p-2 md:hidden"
-            aria-label="Toggle menu"
-            aria-expanded={isMobileMenuOpen}
-          >
-            {isMobileMenuOpen ? (
-              <X className="h-6 w-6" />
-            ) : (
-              <Menu className="h-6 w-6" />
-            )}
-          </button>
+          <div className="flex items-center gap-1 md:hidden">
+            <ThemeToggle />
+            <button
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              className="p-2 text-black dark:text-white"
+              aria-label="Toggle menu"
+              aria-expanded={isMobileMenuOpen}
+            >
+              {isMobileMenuOpen ? (
+                <X className="h-6 w-6" />
+              ) : (
+                <Menu className="h-6 w-6" />
+              )}
+            </button>
+          </div>
         </div>
       </nav>
 
       <div
-        className={`fixed inset-0 z-40 bg-white transition-opacity duration-500 md:hidden ${
+        className={`fixed inset-0 z-40 bg-white transition-opacity duration-500 dark:bg-black md:hidden ${
           isMobileMenuOpen
             ? "pointer-events-auto opacity-100"
             : "pointer-events-none opacity-0"
@@ -102,7 +108,7 @@ export function Navigation() {
                 target={link.name === "GitHub" ? "_blank" : undefined}
                 rel={link.name === "GitHub" ? "noreferrer" : undefined}
                 onClick={() => setIsMobileMenuOpen(false)}
-                className={`font-display text-5xl text-black transition-all duration-500 hover:text-black/55 ${
+                className={`font-display text-5xl text-black transition-all duration-500 hover:text-black/55 dark:text-white dark:hover:text-white/55 ${
                   isMobileMenuOpen
                     ? "translate-y-0 opacity-100"
                     : "translate-y-4 opacity-0"
@@ -117,7 +123,7 @@ export function Navigation() {
           </div>
 
           <div
-            className={`border-t border-black/10 pt-8 transition-all duration-500 ${
+            className={`border-t border-black/10 pt-8 transition-all duration-500 dark:border-white/10 ${
               isMobileMenuOpen
                 ? "translate-y-0 opacity-100"
                 : "translate-y-4 opacity-0"
@@ -127,7 +133,7 @@ export function Navigation() {
             <a
               href="/dashboard"
               onClick={() => setIsMobileMenuOpen(false)}
-              className="inline-flex h-14 w-full items-center justify-center rounded-xl bg-black text-base font-medium text-white"
+              className="inline-flex h-14 w-full items-center justify-center rounded-xl bg-black text-base font-medium text-white dark:bg-white dark:text-black"
             >
               Get started
             </a>
