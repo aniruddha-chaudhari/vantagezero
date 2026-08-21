@@ -2,8 +2,10 @@ import Link from "next/link";
 import { Boxes, CalendarClock, TriangleAlert } from "lucide-react";
 
 import { listProductsForSession, listRecentEvents } from "@/db/queries";
+import { formatChangeDiff } from "@/domain/changes";
 import { readSessionId } from "@/lib/session";
 import { Badge } from "@/components/ui/badge";
+import { BuildabilityDial } from "@/components/buildability-dial";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -18,8 +20,8 @@ const SEVERITY_DOT: Record<string, string> = {
 
 function scoreTone(score: number | null): { badge: "outline" | "secondary" | "destructive"; bar: string } {
   if (score == null) return { badge: "secondary", bar: "bg-muted-foreground" };
-  if (score >= 80) return { badge: "outline", bar: "bg-chart-1" };
-  if (score >= 50) return { badge: "secondary", bar: "bg-chart-3" };
+  if (score >= 80) return { badge: "outline", bar: "bg-chart-3" };
+  if (score >= 50) return { badge: "secondary", bar: "bg-chart-4" };
   return { badge: "destructive", bar: "bg-destructive" };
 }
 
@@ -87,6 +89,17 @@ export default async function OverviewPage() {
           <Link href="/dashboard/new">New build</Link>
         </Button>
       </div>
+
+      <BuildabilityDial
+        builds={builds.map(({ product, buildability }) => ({
+          id: product.id,
+          name: product.name,
+          plannedBuildQty: product.plannedBuildQty,
+          buildableUnits: buildability.productBuildableUnits,
+          score: buildability.score?.total ?? null,
+          bottleneckMpn: buildability.bottleneck?.mpn ?? null,
+        }))}
+      />
 
       <div className="grid grid-cols-2 divide-x divide-y rounded-xl border lg:grid-cols-4 lg:divide-y-0">
         {[
@@ -222,6 +235,12 @@ export default async function OverviewPage() {
                       )}
                     </p>
                     <p className="mt-1 text-xs leading-5 text-muted-foreground">{event.message}</p>
+                    {(() => {
+                      const diff = formatChangeDiff(event.beforeJson, event.afterJson);
+                      return diff ? (
+                        <p className="mt-1 font-mono text-[11px] font-medium text-foreground/70">{diff}</p>
+                      ) : null;
+                    })()}
                   </div>
                 </div>
               ))}
