@@ -105,17 +105,6 @@ export default async function OverviewPage() {
         </Button>
       </div>
 
-      <BuildabilityDial
-        builds={builds.map(({ product, buildability }) => ({
-          id: product.id,
-          name: product.name,
-          plannedBuildQty: product.plannedBuildQty,
-          buildableUnits: buildability.productBuildableUnits,
-          score: buildability.score?.total ?? null,
-          bottleneckMpn: buildability.bottleneck?.mpn ?? null,
-        }))}
-      />
-
       <div className="grid grid-cols-2 divide-x divide-y rounded-xl border lg:grid-cols-4 lg:divide-y-0">
         {[
           { label: "Active builds", value: builds.length.toLocaleString(), sub: `${plannedUnits.toLocaleString()} units planned` },
@@ -149,6 +138,17 @@ export default async function OverviewPage() {
           </div>
         ))}
       </div>
+
+      <BuildabilityDial
+        builds={builds.map(({ product, buildability }) => ({
+          id: product.id,
+          name: product.name,
+          plannedBuildQty: product.plannedBuildQty,
+          buildableUnits: buildability.productBuildableUnits,
+          score: buildability.score?.total ?? null,
+          bottleneckMpn: buildability.bottleneck?.mpn ?? null,
+        }))}
+      />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {builds.map(({ product, buildability }) => {
