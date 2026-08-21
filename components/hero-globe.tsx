@@ -118,7 +118,7 @@ export function HeroGlobe() {
   return (
     <div
       aria-hidden="true"
-      className="pointer-events-none absolute left-1/2 top-[450px] z-0 h-[720px] w-[1360px] -translate-x-1/2 sm:top-[465px] sm:w-[1510px] lg:top-[455px] lg:w-[1680px]"
+      className="pointer-events-none absolute left-1/2 top-[450px] z-0 h-[720px] w-[1360px] -translate-x-1/2 text-black dark:text-white sm:top-[465px] sm:w-[1510px] lg:top-[455px] lg:w-[1680px]"
       style={{
         maskImage:
           "linear-gradient(to bottom, transparent 0%, black 6%, black 72%, transparent 96%)",
@@ -137,7 +137,8 @@ export function HeroGlobe() {
             cy="582"
             rx="682"
             ry="100"
-            stroke="rgba(10,10,10,0.028)"
+            stroke="currentColor"
+            strokeOpacity="0.028"
             strokeWidth="1"
             transform="rotate(-6 800 582)"
           />
@@ -146,25 +147,28 @@ export function HeroGlobe() {
             cy="580"
             rx="710"
             ry="118"
-            stroke="rgba(10,10,10,0.020)"
+            stroke="currentColor"
+            strokeOpacity="0.020"
             strokeWidth="1"
             transform="rotate(7 800 580)"
           />
 
           <path
             d={spherePath}
-            stroke="rgba(10,10,10,0.105)"
+            stroke="currentColor"
+            strokeOpacity="0.105"
             strokeWidth="1.05"
           />
 
           <path
             d={graticulePath}
-            stroke="rgba(10,10,10,0.040)"
+            stroke="currentColor"
+            strokeOpacity="0.040"
             strokeWidth="0.54"
           />
 
           {/* Actual geographic dots. No SVG pattern or land-shape masking. */}
-          <g fill="rgba(10,10,10,0.245)">
+          <g fill="currentColor" fillOpacity="0.245">
             {landDots.map((dot, index) => (
               <circle
                 key={`land-${index}`}
@@ -179,7 +183,8 @@ export function HeroGlobe() {
           <path
             d={geographyLinesPath}
             fill="none"
-            stroke="rgba(10,10,10,0.060)"
+            stroke="currentColor"
+            strokeOpacity="0.060"
             strokeWidth="0.34"
             strokeLinejoin="round"
             strokeLinecap="round"
@@ -191,7 +196,8 @@ export function HeroGlobe() {
               cx={cx}
               cy={cy}
               r={r}
-              fill="rgba(10,10,10,0.075)"
+              fill="currentColor"
+              fillOpacity="0.075"
             />
           ))}
         </g>
