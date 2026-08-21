@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Boxes, LayoutDashboard, Library, ServerCog, Settings, TrendingDown } from "lucide-react";
 
@@ -31,10 +32,10 @@ export function DashboardNav() {
           {navItems.map(({ label, href, icon: Icon }) => (
             <SidebarMenuItem key={href}>
               <SidebarMenuButton asChild isActive={pathname === href}>
-                <a href={href}>
+                <Link href={href}>
                   <Icon />
                   {label}
-                </a>
+                </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
           ))}
@@ -48,11 +49,10 @@ export function DashboardSettingsLink() {
   return (
     <SidebarMenu>
       <SidebarMenuItem>
-        <SidebarMenuButton asChild>
-          <a href="#settings">
-            <Settings />
-            Settings
-          </a>
+        <SidebarMenuButton disabled title="Settings isn't built yet">
+          <Settings />
+          Settings
+          <span className="ml-auto text-[9px] font-medium uppercase tracking-wide text-muted-foreground">soon</span>
         </SidebarMenuButton>
       </SidebarMenuItem>
     </SidebarMenu>
