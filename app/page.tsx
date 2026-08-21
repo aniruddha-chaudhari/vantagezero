@@ -3,6 +3,7 @@ import { Activity, Database, ShieldCheck } from "lucide-react";
 import { HeroGlobe } from "@/components/hero-globe";
 import { LandingSections } from "@/components/landing-sections";
 import { Navigation } from "@/components/navigation";
+import { getPlatformStats } from "@/db/analytics";
 
 const signals = [
   { label: "Monitor changes", icon: Activity },
@@ -10,7 +11,12 @@ const signals = [
   { label: "Act with confidence", icon: ShieldCheck },
 ];
 
-export default function Home() {
+// Real platform stats, refreshed periodically rather than baked in at build time forever.
+export const revalidate = 300;
+
+export default async function Home() {
+  const stats = await getPlatformStats();
+
   return (
     <main className="relative block w-full min-h-screen overflow-visible bg-white text-black">
       <Navigation />
@@ -21,7 +27,7 @@ export default function Home() {
       >
         <div className="relative z-10 mx-auto flex max-w-[1180px] flex-col items-center text-center">
           <div className="flex flex-col items-center">
-            <p className="text-[15px] font-medium tracking-[-0.018em] text-black/52 sm:text-base">
+            <p className="text-[15px] font-medium tracking-[-0.018em] text-black/64 sm:text-base">
               Self-healing supply-chain intelligence
             </p>
             <div className="mt-4 flex items-center sm:mt-5" aria-hidden="true">
@@ -56,7 +62,7 @@ export default function Home() {
             ))}
           </div>
 
-          <div className="mt-[clamp(24px,3.5vh,42px)] flex max-w-full flex-wrap items-center justify-center gap-y-3 text-[11px] font-medium tracking-[-0.012em] text-black/54 sm:text-xs">
+          <div className="mt-[clamp(24px,3.5vh,42px)] flex max-w-full flex-wrap items-center justify-center gap-y-3 text-[11px] font-medium tracking-[-0.012em] text-black/64 sm:text-xs">
             <div className="flex items-center gap-2.5 px-4">
               <span className="h-1.5 w-1.5 rounded-full border border-black/55" />
               <span>LIVE</span>
@@ -64,17 +70,17 @@ export default function Home() {
             <span className="hidden h-5 w-px bg-black/12 sm:block" />
             <div className="flex items-center gap-2.5 px-4">
               <Activity className="h-4 w-4 stroke-[1.35]" />
-              <span>Sources self-healing</span>
+              <span>{stats.collectors} collector{stats.collectors === 1 ? "" : "s"} self-healing</span>
             </div>
             <span className="hidden h-5 w-px bg-black/12 sm:block" />
             <div className="flex items-center gap-2.5 px-4">
               <Database className="h-4 w-4 stroke-[1.35]" />
-              <span>Sources monitored: 1,284</span>
+              <span>Parts tracked: {stats.trackedMpns.toLocaleString()}</span>
             </div>
             <span className="hidden h-5 w-px bg-black/12 sm:block" />
             <div className="flex items-center gap-2.5 px-4">
               <ShieldCheck className="h-4 w-4 stroke-[1.35]" />
-              <span>Buildability signals: 98.7%</span>
+              <span>Incidents caught: {stats.incidentsCaught.toLocaleString()}</span>
             </div>
           </div>
         </div>
