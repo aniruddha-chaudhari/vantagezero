@@ -253,6 +253,64 @@ export async function listComparableMpns(): Promise<Array<{ mpn: string; supplie
   return rows.map((r) => ({ mpn: r.mpn, supplierCount: Number(r.suppliers) }));
 }
 
+export interface BuildCostLine {
+  mpn: string;
+  currency: string;
+  supplier: string;
+  unitPrice: number;
+  lineTotal: number;
+}
+
+export interface BuildCostSummary {
+  /** One subtotal per currency - a GBP total and an INR total are never added together. */
+  byCurrency: Array<{ currency: string; total: number; lines: BuildCostLine[] }>;
+  /** Parts with no price-break tier reaching the required quantity - listed, never priced as 0. */
+  unpriced: string[];
+}
+
+/**
+ * Cheapest achievable cost for a BOM, one line per part at its required quantity, grouped by
+ * currency exactly like the pricing page (never converted, never blended into one total).
+ */
+export async function getBuildCostSummary(parts: Array<{ mpn: string; requiredQty: number }>): Promise<BuildCostSummary> {
+  const lines: BuildCostLine[] = [];
+  const unpriced: string[] = [];
+
+  for (const part of parts) {
+    const curves = await getSupplierPriceCurves(part.mpn, part.requiredQty);
+    const priced = curves.filter((c) => c.lineTotalAtQty != null);
+    if (priced.length === 0) {
+      unpriced.push(part.mpn);
+      continue;
+    }
+    const cheapest = priced.reduce((best, c) => (c.lineTotalAtQty! < best.lineTotalAtQty! ? c : best));
+    lines.push({
+      mpn: part.mpn,
+      currency: cheapest.currency,
+      supplier: cheapest.supplier,
+      unitPrice: cheapest.unitPriceAtQty!,
+      lineTotal: cheapest.lineTotalAtQty!,
+    });
+  }
+
+  const byCurrencyMap = new Map<string, BuildCostLine[]>();
+  for (const line of lines) {
+    const list = byCurrencyMap.get(line.currency) ?? [];
+    list.push(line);
+    byCurrencyMap.set(line.currency, list);
+  }
+
+  const byCurrency = [...byCurrencyMap.entries()]
+    .map(([currency, currencyLines]) => ({
+      currency,
+      total: currencyLines.reduce((sum, l) => sum + l.lineTotal, 0),
+      lines: currencyLines.slice().sort((a, b) => b.lineTotal - a.lineTotal),
+    }))
+    .sort((a, b) => b.total - a.total);
+
+  return { byCurrency, unpriced };
+}
+
 /** Daily validation pass rate - the plan's "pass rate over time" chart on Source Health. */
 export async function getPassRateHistory(): Promise<
   Array<{ date: string; total: number; ok: number; passRate: number }>
