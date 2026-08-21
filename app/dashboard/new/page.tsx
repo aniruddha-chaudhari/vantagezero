@@ -2,75 +2,46 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { CircleAlert, Sparkles } from "lucide-react";
+import { Plus, Sparkles, Trash2 } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DesignWizard } from "@/components/design-wizard";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-
-const EXAMPLE_PARTS = "STM32F407VGT6, 1\nSTM32F103C8T6, 2, critical\n24LC256-I/SN, 1\nTPS7A4700RGWR, 4, important";
+import { cn } from "@/lib/utils";
 
 const CRITICALITY_VALUES = ["critical", "important", "optional"] as const;
+type Criticality = (typeof CRITICALITY_VALUES)[number];
+
+interface PartRow {
+  id: string;
+  mpn: string;
+  qtyPerUnit: string;
+  criticality: Criticality | "";
+}
+
+const EXAMPLE_ROWS: Omit<PartRow, "id">[] = [
+  { mpn: "STM32F407VGT6", qtyPerUnit: "1", criticality: "" },
+  { mpn: "STM32F103C8T6", qtyPerUnit: "2", criticality: "critical" },
+  { mpn: "24LC256-I/SN", qtyPerUnit: "1", criticality: "" },
+  { mpn: "TPS7A4700RGWR", qtyPerUnit: "4", criticality: "important" },
+];
+
+function emptyRow(id: string): PartRow {
+  return { id, mpn: "", qtyPerUnit: "1", criticality: "" };
+}
+
+let rowCounter = 0;
+function nextRowId(): string {
+  rowCounter += 1;
+  return `row-${rowCounter}`;
+}
 
 interface ParsedPart {
   mpn: string;
   qtyPerUnit: number;
-  criticality?: (typeof CRITICALITY_VALUES)[number];
-}
-
-interface LineIssue {
-  line: string;
-  message: string;
-}
-
-function parsePartsInput(text: string): { parts: ParsedPart[]; issues: LineIssue[] } {
-  const parts: ParsedPart[] = [];
-  const issues: LineIssue[] = [];
-
-  for (const raw of text.split("\n")) {
-    const line = raw.trim();
-    if (!line) continue;
-
-    const [mpnRaw, qtyRaw, criticalityRaw] = line.split(",").map((s) => s.trim());
-    if (!mpnRaw) {
-      issues.push({ line, message: "No MPN found before the first comma" });
-      continue;
-    }
-
-    let qtyPerUnit = 1;
-    if (qtyRaw) {
-      const qty = Number(qtyRaw);
-      if (!Number.isFinite(qty) || qty <= 0) {
-        issues.push({ line, message: `"${qtyRaw}" isn't a valid quantity - defaulted to 1` });
-      } else {
-        qtyPerUnit = qty;
-      }
-    }
-
-    let criticality: ParsedPart["criticality"];
-    if (criticalityRaw) {
-      if ((CRITICALITY_VALUES as readonly string[]).includes(criticalityRaw)) {
-        criticality = criticalityRaw as ParsedPart["criticality"];
-      } else {
-        issues.push({ line, message: `"${criticalityRaw}" isn't critical/important/optional - ignored` });
-      }
-    }
-
-    parts.push({ mpn: mpnRaw, qtyPerUnit, criticality });
-  }
-
-  return { parts, issues };
-}
-
-function CriticalityBadge({ value }: { value?: ParsedPart["criticality"] }) {
-  if (value === "critical") return <Badge variant="destructive">critical</Badge>;
-  if (value === "important") return <Badge variant="secondary">important</Badge>;
-  if (value === "optional") return <Badge variant="outline">optional</Badge>;
-  return <span className="text-[11px] text-muted-foreground">—</span>;
+  criticality?: Criticality;
 }
 
 export default function NewBuildPage() {
@@ -79,11 +50,35 @@ export default function NewBuildPage() {
   const [name, setName] = useState("");
   const [plannedBuildQty, setPlannedBuildQty] = useState("1000");
   const [shipDate, setShipDate] = useState("");
-  const [partsText, setPartsText] = useState("");
+  const [rows, setRows] = useState<PartRow[]>([emptyRow("row-initial")]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const { parts, issues } = parsePartsInput(partsText);
+  function updateRow(id: string, patch: Partial<PartRow>) {
+    setRows((prev) => prev.map((row) => (row.id === id ? { ...row, ...patch } : row)));
+  }
+
+  function addRow() {
+    setRows((prev) => [...prev, emptyRow(nextRowId())]);
+  }
+
+  function removeRow(id: string) {
+    setRows((prev) => (prev.length === 1 ? prev : prev.filter((row) => row.id !== id)));
+  }
+
+  function fillWithExample() {
+    setRows(EXAMPLE_ROWS.map((row) => ({ ...row, id: nextRowId() })));
+  }
+
+  const filledRows = rows.filter((row) => row.mpn.trim());
+  const parts: ParsedPart[] = filledRows.map((row) => {
+    const qty = Number(row.qtyPerUnit);
+    return {
+      mpn: row.mpn.trim(),
+      qtyPerUnit: Number.isFinite(qty) && qty > 0 ? qty : 1,
+      criticality: row.criticality || undefined,
+    };
+  });
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -151,7 +146,7 @@ export default function NewBuildPage() {
       {mode === "guided" ? (
         <DesignWizard />
       ) : (
-      <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-[1fr_340px] lg:items-start">
+      <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-[1fr_300px] lg:items-start">
         <Card>
           <CardHeader>
             <CardTitle className="text-base tracking-[-0.015em]">Build details</CardTitle>
@@ -181,37 +176,85 @@ export default function NewBuildPage() {
 
             <div className="grid gap-2">
               <div className="flex items-center justify-between">
-                <Label htmlFor="parts">Parts</Label>
+                <Label>Parts</Label>
                 <button
                   type="button"
-                  onClick={() => setPartsText(EXAMPLE_PARTS)}
+                  onClick={fillWithExample}
                   className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
                 >
                   <Sparkles className="size-3.5" />
                   Fill with an example
                 </button>
               </div>
-              <Textarea
-                id="parts"
-                rows={9}
-                value={partsText}
-                onChange={(e) => setPartsText(e.target.value)}
-                placeholder={EXAMPLE_PARTS}
-                className="font-mono text-xs"
-              />
 
-              {issues.length > 0 && (
-                <div className="space-y-1.5 rounded-lg border border-chart-4/25 bg-chart-4/[0.06] p-3">
-                  {issues.map((issue, i) => (
-                    <p key={i} className="flex items-start gap-1.5 text-[11px] leading-4 text-foreground/80">
-                      <CircleAlert className="mt-[1px] size-3.5 shrink-0 text-chart-4" />
-                      <span>
-                        <span className="font-mono">{issue.line}</span> — {issue.message}
-                      </span>
-                    </p>
-                  ))}
+              <div className="overflow-hidden rounded-lg border">
+                <div className="hidden grid-cols-[1fr_100px_140px_36px] gap-2 border-b bg-secondary/40 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground sm:grid">
+                  <span>MPN</span>
+                  <span>Qty / unit</span>
+                  <span>Criticality</span>
+                  <span />
                 </div>
-              )}
+
+                <div className="divide-y">
+                  {rows.map((row) => {
+                    const qtyNum = Number(row.qtyPerUnit);
+                    const qtyInvalid = row.qtyPerUnit !== "" && (!Number.isFinite(qtyNum) || qtyNum <= 0);
+
+                    return (
+                      <div key={row.id} className="grid grid-cols-2 gap-2 p-3 sm:grid-cols-[1fr_100px_140px_36px] sm:items-center">
+                        <div className="col-span-2 sm:col-span-1">
+                          <Input
+                            value={row.mpn}
+                            onChange={(e) => updateRow(row.id, { mpn: e.target.value })}
+                            placeholder="MPN, e.g. STM32F407VGT6"
+                            className="font-mono text-xs"
+                          />
+                        </div>
+                        <div>
+                          <Input
+                            type="number"
+                            min={1}
+                            value={row.qtyPerUnit}
+                            onChange={(e) => updateRow(row.id, { qtyPerUnit: e.target.value })}
+                            className={cn("text-xs", qtyInvalid && "border-destructive text-destructive")}
+                          />
+                          {qtyInvalid && <p className="mt-1 text-[10px] text-destructive">Defaults to 1</p>}
+                        </div>
+                        <select
+                          value={row.criticality}
+                          onChange={(e) => updateRow(row.id, { criticality: e.target.value as PartRow["criticality"] })}
+                          className="h-9 rounded-md border bg-transparent px-2 text-xs shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                        >
+                          <option value="">—</option>
+                          {CRITICALITY_VALUES.map((value) => (
+                            <option key={value} value={value}>
+                              {value}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => removeRow(row.id)}
+                          disabled={rows.length === 1}
+                          aria-label="Remove part"
+                          className="inline-flex size-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:pointer-events-none disabled:opacity-30"
+                        >
+                          <Trash2 className="size-4" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={addRow}
+                  className="flex w-full items-center justify-center gap-1.5 border-t bg-secondary/20 py-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary/40 hover:text-foreground"
+                >
+                  <Plus className="size-3.5" />
+                  Add part
+                </button>
+              </div>
             </div>
 
             {error && <p className="text-sm text-destructive">{error}</p>}
@@ -224,56 +267,15 @@ export default function NewBuildPage() {
 
         <div className="space-y-4 lg:sticky lg:top-20">
           <Card>
-            <CardHeader>
-              <CardTitle className="text-sm tracking-[-0.01em]">Format</CardTitle>
-              <CardDescription>One part per line.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="rounded-lg border bg-secondary/60 p-3 font-mono text-[11px] leading-5 text-foreground/80">
-                MPN<span className="text-muted-foreground">, qty per unit</span>
-                <span className="text-muted-foreground">, criticality</span>
-              </div>
-              <dl className="space-y-2.5 text-xs">
-                <div className="flex items-baseline justify-between gap-3">
-                  <dt className="font-mono font-semibold">MPN</dt>
-                  <dd className="text-right text-muted-foreground">required · exact part number</dd>
-                </div>
-                <div className="flex items-baseline justify-between gap-3">
-                  <dt className="font-mono font-semibold">qty per unit</dt>
-                  <dd className="text-right text-muted-foreground">optional · defaults to 1</dd>
-                </div>
-                <div className="flex items-baseline justify-between gap-3">
-                  <dt className="font-mono font-semibold">criticality</dt>
-                  <dd className="text-right text-muted-foreground">optional · critical/important/optional</dd>
-                </div>
-              </dl>
-            </CardContent>
-          </Card>
-
-          <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm tracking-[-0.01em]">
-                Preview {parts.length > 0 && <span className="font-normal text-muted-foreground">· {parts.length} parsed</span>}
+                Summary {parts.length > 0 && <span className="font-normal text-muted-foreground">· {parts.length} part{parts.length === 1 ? "" : "s"}</span>}
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              {parts.length === 0 ? (
-                <p className="text-xs leading-5 text-muted-foreground">
-                  Parsed parts appear here as you type, so you can catch a typo before creating the build.
-                </p>
-              ) : (
-                <ul className="space-y-2">
-                  {parts.map((p, i) => (
-                    <li key={`${p.mpn}-${i}`} className="flex items-center justify-between gap-2 border-b pb-2 last:border-b-0 last:pb-0">
-                      <div className="min-w-0">
-                        <p className="truncate font-mono text-xs font-medium">{p.mpn}</p>
-                        <p className="text-[10px] text-muted-foreground">qty {p.qtyPerUnit} / unit</p>
-                      </div>
-                      <CriticalityBadge value={p.criticality} />
-                    </li>
-                  ))}
-                </ul>
-              )}
+            <CardContent className="space-y-3 text-xs leading-5 text-muted-foreground">
+              <p>Each part needs an MPN. Quantity per unit defaults to 1 if left blank.</p>
+              <p>Criticality flags which shortfalls to surface first - leave it unset for parts that don&apos;t need special attention.</p>
+              <p>A part not yet in Vantage&apos;s tracked catalog still gets added, it just won&apos;t show live stock until a source exists for it.</p>
             </CardContent>
           </Card>
         </div>
