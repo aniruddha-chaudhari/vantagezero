@@ -100,14 +100,23 @@ export async function healScraper(collectorId: string, url: string, prompt: stri
   return JSON.parse(stdout);
 }
 
-/** Approves (or rejects) a heal that is awaiting approval. */
+/**
+ * Approves (or rejects) a heal that is awaiting approval.
+ *
+ * `autoSave` maps to the CLI's `--auto-save`, which is forwarded as `auto_save` on Bright
+ * Data's resume-self-healing-job call. Without it, approving lets the paused job resume but
+ * never persists the healed template to production - the collector reverts, the next cron
+ * cycle re-breaks on the same selector, and the loop heals the identical break forever. It
+ * only applies on approval, so it is never sent alongside `--reject`.
+ */
 export async function approveHeal(
   collectorId: string,
   url: string,
-  options: { reject?: boolean } = {},
+  options: { reject?: boolean; autoSave?: boolean } = {},
 ): Promise<unknown> {
   const args = ["scraper", "approve", collectorId, "--url", url];
   if (options.reject) args.push("--reject");
+  else if (options.autoSave) args.push("--auto-save");
   const stdout = await runCli(args);
   return JSON.parse(stdout);
 }

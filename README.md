@@ -113,9 +113,12 @@ Real numbers from the live database, not placeholders:
   `brightdata/normalize.ts`) - never a fabricated zero
 - 45 collector runs executed
 - 1 heal performed on the STMicroelectronics collector (see `brightdata/examples/st-lifecycle-heal.json`):
-  the preview came back clean, but the approved production run did not pick up the fix, so the
-  ST normalizer works around the original garbled field defensively rather than trusting the
-  unused preview
+  the preview came back clean, but the approved production run did not pick up the fix. Root
+  cause, found later: the approve call was missing `--auto-save`, so the healed template was
+  never persisted back to the collector - approving resumed the paused job but left the saved
+  template untouched. The flag is now wired through `approveHeal()` (see "Zero-touch without
+  removing the gate" below). The ST normalizer still works around the original garbled field
+  defensively, since the observations already on record were collected pre-fix
 
 The remaining unresolved catalog MPNs (PMIC, sensor, protection categories, a couple of
 MCU/transceiver variants) failed for legitimate reasons already listed above and are left
@@ -160,6 +163,39 @@ the plan's own examples - run with `npm run test:gates`). `brightdata/heal.ts` r
 preview through the same normalize-and-validate pipeline production ingestion uses, then
 these gates, so there's one implementation of "is this heal trustworthy," not two.
 
+### Zero-touch without removing the gate
+
+Bright Data offers two ways to run a heal. `bdata scraper heal` pauses at
+`status: pending_answer` / `step: user_approval` for a person to eyeball the diff — safe, but
+it doesn't run unattended. `bdata scraper heal --auto-approve` skips the approval gate
+entirely — unattended, but it accepts any diff that parses, so a healed selector reading pin
+count instead of stock lands straight in production as a number that will size a purchase
+order.
+
+Vantage takes the third option: keep the gate, replace the reviewer. The four gates hold the
+approval authority, so the loop is unattended *and* verified.
+
+| | Unattended | Verified |
+|---|---|---|
+| `heal`, human approves in the UI | ✗ | ✓ (a person reads the diff) |
+| `heal --auto-approve` | ✓ | ✗ (any parseable diff ships) |
+| Vantage's gated loop | ✓ | ✓ (four gates decide; humans see only the ambiguous cases) |
+
+The three gate decisions map onto three genuinely distinct end states, not three log lines:
+
+| Decision | Action | Collector state |
+|---|---|---|
+| `auto_approve` | `approve --auto-save` | Healed template **persisted to production** |
+| `auto_reject` | `approve --reject`, reheal with a sharper prompt | Unchanged; job ended |
+| `escalate` | Left in `pending_answer`, Slack alert sent | Awaiting a human on `/dashboard/sources` |
+
+`--auto-save` is the flag that makes the approve path durable: it's forwarded as `auto_save`
+to Bright Data's resume-self-healing-job call, and without it an approval lets the paused job
+resume but never writes the healed template back to the collector. The fix works for that one
+run, the collector reverts, and the next cron cycle re-breaks on the same selector and heals
+the identical break again. That failure is exactly what bit the ST collector before the flag was
+wired in — it's the one heal in the counts above whose clean preview never reached production.
+
 The read/write API surface for this (`GET /api/incidents/open`, `GET
 /api/observations/latest-valid`, `POST /api/incidents/[id]/resolve`) is bearer-token
 protected like the ingestion endpoint, and never calls `bdata scraper create/heal` itself -
@@ -168,6 +204,28 @@ live rehearsal) is driven from the coding-agent CLI, not from Vantage's own back
 exception is `POST /api/incidents/[id]/approve`: a human approving or rejecting an
 already-escalated incident from the **Source health** screen (`/dashboard/sources`) - acting
 on a decision, not authoring a scraper.
+
+## AI assistance disclosure
+
+This project was built with an AI coding assistant (Claude Code), and the Bright Data
+collectors were created and healed by driving the `bdata` CLI from that same terminal — which
+is the workflow Scraper Studio is designed for.
+
+What the assistant did: scaffolding, React/Tailwind components, boilerplate, test cases, and
+drafting prose in this README.
+
+What I decided and can explain: which sources to use and why (each chosen by a live Day-1
+probe on the Web Unlocker, with the rejections documented above — Mouser India blocked,
+Robu.in boolean-only, TME ruled out for having a public API); the four heal gates and their
+decision rule, including why identity/shape auto-reject while continuity/collision escalate;
+the per-source normalizer field mappings; the database schema and its insert-only observation
+model; and the rule that a failed validation opens an incident rather than writing a zero.
+
+Separately, and distinct from the above: the app uses an LLM at **runtime** (Groq) for two
+product features — the guided "Help me choose parts" flow and the alternative-part
+suggestions. Both are treated as untrusted input: every part the model names is
+re-verified against the real tracked catalog before it is ever labelled "tracked"
+(`domain/design.ts`, `domain/alternatives.ts`). No scraped value is ever produced by an LLM.
 
 ## Limitations
 

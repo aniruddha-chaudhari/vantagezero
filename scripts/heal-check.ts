@@ -8,9 +8,12 @@
  * exact same evaluateHealPreview() gate logic scripts/heal-loop.ts uses. Exit code is the
  * contract a shell-scripted CI step can act on directly:
  *
- *   exit 0 -> auto_approve   (bdata scraper approve <id>)
+ *   exit 0 -> auto_approve   (bdata scraper approve <id> --auto-save)
  *   exit 1 -> auto_reject    (bdata scraper approve <id> --reject, then reheal)
  *   exit 2 -> escalate       (leave pending, Slack alert, workflow still exits green)
+ *
+ * --auto-save on the approve path is what persists the healed template to production;
+ * without it the collector reverts and the same break recurs on the next cycle.
  *
  * Required env: INGEST_API_TOKEN. Optional: APP_BASE_URL (defaults to localhost:3000).
  */
