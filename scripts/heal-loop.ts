@@ -131,7 +131,10 @@ async function processIncident(incident: OpenIncident): Promise<void> {
   const { prompt, evaluation } = result;
 
   if (evaluation.decision === "auto_approve") {
-    await approveHeal(incident.collectorId, incident.sourceTarget.sourceUrl, { reject: false });
+    // autoSave persists the healed template to production. Approving without it lets the
+    // paused job resume but leaves the collector's saved template untouched, so the next
+    // cron cycle re-breaks on the same selector and re-heals the identical break.
+    await approveHeal(incident.collectorId, incident.sourceTarget.sourceUrl, { reject: false, autoSave: true });
     await resolveIncidentApi(incident.id, {
       resolution: "auto_approved",
       status: "resolved",
