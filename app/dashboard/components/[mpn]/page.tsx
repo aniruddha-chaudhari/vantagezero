@@ -21,7 +21,7 @@ function unitPriceAtQty(priceBreaks: Array<{ minQty: number; unitPrice: string }
 
 function FreshnessBadge({ state }: { state: "fresh" | "stale" }) {
   return state === "fresh" ? (
-    <Badge variant="outline" className="border-chart-2/25 bg-chart-1/10 text-chart-4">
+    <Badge variant="outline" className="border-chart-3/25 bg-chart-3/10 text-chart-3">
       fresh
     </Badge>
   ) : (
@@ -42,7 +42,17 @@ export default async function ComponentDetailPage({
   const detail = await getComponentDetail(mpn);
   const requiredQty = qty ? Number(qty) : undefined;
 
-  const totalStock = detail.distributorSources.reduce((sum, s) => sum + s.stock, 0);
+  // Stock stays grouped by region (never summed across them, master-plan §5) - a UK pool and
+  // an India pool are two separate numbers, largest first so "primary" has one clear meaning.
+  const stockByRegion = new Map<string, number>();
+  for (const s of detail.distributorSources) {
+    const label = s.region ?? "unspecified";
+    stockByRegion.set(label, (stockByRegion.get(label) ?? 0) + s.stock);
+  }
+  const regionTotals = [...stockByRegion.entries()]
+    .map(([region, stock]) => ({ region, stock }))
+    .sort((a, b) => b.stock - a.stock);
+  const primaryStock = regionTotals[0]?.stock ?? 0;
   const primaryImage = detail.distributorSources.find((s) => s.imageUrl)?.imageUrl ?? null;
   const priceSources = detail.distributorSources.filter((s) => s.priceBreaks.length > 0);
   const incomingSource = detail.distributorSources.find((s) => s.incoming != null && s.incoming > 0) ?? detail.distributorSources[0];
@@ -80,8 +90,27 @@ export default async function ComponentDetailPage({
       <Card>
         <CardHeader>
           <CardDescription className="text-[11px] font-semibold uppercase tracking-[0.14em]">Decision</CardDescription>
-          <CardTitle className="font-display text-5xl tracking-[-0.04em]">{totalStock.toLocaleString()}</CardTitle>
-          <CardDescription>units observed public stock across tracked regional sites</CardDescription>
+          <div className="flex flex-wrap items-baseline gap-x-8 gap-y-1">
+            {regionTotals.map((r, i) => (
+              <div key={r.region}>
+                <CardTitle
+                  className={i === 0 ? "font-display text-5xl tracking-[-0.04em]" : "font-display text-2xl tracking-[-0.03em] text-muted-foreground"}
+                >
+                  {r.stock.toLocaleString()}
+                </CardTitle>
+                <CardDescription>
+                  units in {r.region}
+                  {i === 0 && regionTotals.length === 1 ? " · only region tracked" : i === 0 ? " · primary region" : ""}
+                </CardDescription>
+              </div>
+            ))}
+          </div>
+          {regionTotals.length > 1 && (
+            <CardDescription className="text-[11px]">
+              Regions are never combined into one figure - a UK build and an India build draw from
+              different stock.
+            </CardDescription>
+          )}
         </CardHeader>
         {requiredQty != null && (
           <CardContent>
@@ -91,22 +120,26 @@ export default async function ComponentDetailPage({
                 <p className="mt-1 text-xl font-semibold tabular-nums">{requiredQty.toLocaleString()}</p>
               </div>
               <div className="rounded-lg bg-secondary p-3">
-                <p className="text-[10px] uppercase text-muted-foreground">Shortfall</p>
+                <p className="text-[10px] uppercase text-muted-foreground">
+                  Shortfall{regionTotals.length > 1 ? ` (${regionTotals[0].region})` : ""}
+                </p>
                 <p className="mt-1 text-xl font-semibold tabular-nums text-destructive">
-                  {Math.max(0, requiredQty - totalStock).toLocaleString()}
+                  {Math.max(0, requiredQty - primaryStock).toLocaleString()}
                 </p>
               </div>
               <div className="rounded-lg bg-secondary p-3">
-                <p className="text-[10px] uppercase text-muted-foreground">Coverage</p>
-                <p className="mt-1 text-xl font-semibold tabular-nums">{Math.round((totalStock / requiredQty) * 100)}%</p>
+                <p className="text-[10px] uppercase text-muted-foreground">
+                  Coverage{regionTotals.length > 1 ? ` (${regionTotals[0].region})` : ""}
+                </p>
+                <p className="mt-1 text-xl font-semibold tabular-nums">{Math.min(100, Math.round((primaryStock / requiredQty) * 100))}%</p>
               </div>
             </div>
           </CardContent>
         )}
         <CardContent className={requiredQty != null ? "pt-0" : undefined}>
-          <div className="flex items-center gap-2 text-xs font-medium text-chart-4">
+          <div className="flex items-center gap-2 text-xs font-medium text-chart-3">
             <ShieldCheck className="size-4" />
-            Observed public stock across tracked regional sites
+            Observed public stock, kept separate per region
           </div>
         </CardContent>
       </Card>
