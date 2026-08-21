@@ -1,5 +1,6 @@
 import { ShieldCheck } from "lucide-react";
 
+import { AlternativeParts } from "@/components/alternative-parts";
 import { IncomingVsShipChart } from "@/components/charts/incoming-vs-ship";
 import { PriceBreakCurveChart } from "@/components/charts/price-break-curve";
 import { SourceContributionChart } from "@/components/charts/source-contribution";
@@ -229,6 +230,8 @@ export default async function ComponentDetailPage({
           </CardContent>
         </Card>
       )}
+
+      <AlternativeParts mpn={mpn} />
 
       <section className="grid gap-4 xl:grid-cols-2">
         {priceSources.length > 0 ? (
