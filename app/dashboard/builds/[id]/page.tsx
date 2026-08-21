@@ -10,14 +10,21 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { getBuildCostSummary } from "@/db/analytics";
 import { getProductDetail } from "@/db/queries";
 import { formatAge } from "@/domain/freshness";
 import type { RiskLevel } from "@/domain/risk";
 import { readSessionId } from "@/lib/session";
 
+function money(value: number, currency: string): string {
+  const symbol = currency === "GBP" ? "£" : currency === "INR" ? "₹" : currency === "USD" ? "$" : "";
+  const formatted = value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return symbol ? `${symbol}${formatted}` : `${formatted} ${currency}`;
+}
+
 function RiskBadge({ level }: { level: RiskLevel }) {
   if (level === "unknown") return <Badge variant="secondary">unknown</Badge>;
-  if (level === "low") return <Badge variant="outline" className="border-chart-2/25 bg-chart-1/10 text-chart-4">low</Badge>;
+  if (level === "low") return <Badge variant="outline" className="border-chart-3/25 bg-chart-3/10 text-chart-3">low</Badge>;
   if (level === "medium") return <Badge variant="secondary">medium</Badge>;
   if (level === "high") return <Badge variant="destructive">high</Badge>;
   return <Badge variant="destructive">critical</Badge>;
@@ -29,15 +36,28 @@ export default async function BuildDetailPage({ params }: { params: Promise<{ id
   const detail = sessionId ? await getProductDetail(id, sessionId) : null;
   if (!detail) notFound();
 
-  const { product, parts, buildability } = detail;
+  const { product, parts, buildability, singleSourcedCount } = detail;
+
+  const monitoredParts = parts.filter((p) => p.monitored);
+  const costSummary =
+    monitoredParts.length > 0
+      ? await getBuildCostSummary(monitoredParts.map((p) => ({ mpn: p.mpn, requiredQty: p.requiredQty })))
+      : null;
 
   return (
     <div className="space-y-6">
       <div>
-        <Badge variant={buildability.partsAwaitingData > 0 ? "secondary" : "outline"}>
-          {buildability.monitoredCount} of {buildability.totalCount} parts monitored
-          {buildability.partsAwaitingData > 0 && ` · ${buildability.partsAwaitingData} awaiting first observation`}
-        </Badge>
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant={buildability.partsAwaitingData > 0 ? "secondary" : "outline"}>
+            {buildability.monitoredCount} of {buildability.totalCount} parts monitored
+            {buildability.partsAwaitingData > 0 && ` · ${buildability.partsAwaitingData} awaiting first observation`}
+          </Badge>
+          {singleSourcedCount > 0 && (
+            <Badge variant="outline" className="border-chart-4/25 bg-chart-4/10 text-chart-4">
+              {singleSourcedCount} single-sourced
+            </Badge>
+          )}
+        </div>
         <h1 className="mt-3 font-display text-4xl tracking-[-0.04em]">{product.name}</h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
           Planned run of {product.plannedBuildQty.toLocaleString()} units
@@ -110,7 +130,7 @@ export default async function BuildDetailPage({ params }: { params: Promise<{ id
                   <p className="text-[10px] uppercase text-muted-foreground">Coverage</p>
                   <p className="mt-1 text-2xl font-semibold">
                     {buildability.bottleneck.coverageRatio != null
-                      ? `${Math.round(buildability.bottleneck.coverageRatio * 100)}%`
+                      ? `${Math.min(100, Math.round(buildability.bottleneck.coverageRatio * 100))}%`
                       : "—"}
                   </p>
                 </div>
@@ -125,6 +145,57 @@ export default async function BuildDetailPage({ params }: { params: Promise<{ id
           )}
         </Card>
       </section>
+
+      {costSummary && costSummary.byCurrency.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardDescription className="text-[11px] font-semibold uppercase tracking-[0.14em]">
+              Estimated run cost
+            </CardDescription>
+            <CardDescription>
+              Cheapest achievable price per part at this run&apos;s required quantity - never
+              converted or blended across currencies.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {costSummary.byCurrency.map((group) => {
+              const topDrivers = group.lines.slice(0, 3);
+              return (
+                <div key={group.currency} className="rounded-lg border p-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.11em] text-muted-foreground">
+                    Total in {group.currency}
+                  </p>
+                  <p className="mt-1.5 font-display text-3xl tracking-[-0.035em] tabular-nums">
+                    {money(group.total, group.currency)}
+                  </p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    across {group.lines.length} priced part{group.lines.length === 1 ? "" : "s"}
+                  </p>
+                  <div className="mt-3 space-y-1.5 border-t pt-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      Top cost drivers
+                    </p>
+                    {topDrivers.map((line) => (
+                      <div key={line.mpn} className="flex items-center justify-between gap-2 text-xs">
+                        <span className="truncate font-mono">{line.mpn}</span>
+                        <span className="shrink-0 font-medium tabular-nums">{money(line.lineTotal, line.currency)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+            {costSummary.unpriced.length > 0 && (
+              <div className="rounded-lg border border-dashed p-4 text-xs text-muted-foreground">
+                <p className="font-medium text-foreground">
+                  {costSummary.unpriced.length} part{costSummary.unpriced.length === 1 ? "" : "s"} without price data
+                </p>
+                <p className="mt-1.5 font-mono">{costSummary.unpriced.join(", ")}</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <section className="grid gap-4 xl:grid-cols-2">
         <Card>
@@ -193,7 +264,26 @@ export default async function BuildDetailPage({ params }: { params: Promise<{ id
                       <Link href={`/dashboard/components/${encodeURIComponent(part.mpn)}?qty=${part.requiredQty}`}>
                         <div className="flex items-center gap-3">
                           <ComponentImage src={part.imageUrl} alt={part.mpn} className="size-9" />
-                          <p className="font-mono text-xs font-semibold hover:underline">{part.mpn}</p>
+                          <div className="min-w-0">
+                            <p className="flex items-center gap-1.5 font-mono text-xs font-semibold hover:underline">
+                              {part.mpn}
+                              {part.singleSourced && (
+                                <span
+                                  title="Tracked on exactly one distributor - no fallback if this source degrades"
+                                  className="size-1.5 shrink-0 rounded-full bg-chart-4"
+                                />
+                              )}
+                            </p>
+                            {part.region && (
+                              <p className="text-[10px] text-muted-foreground">
+                                {part.region}
+                                {part.otherRegions.length > 0 &&
+                                  ` · +${part.otherRegions.map((r) => r.stock.toLocaleString()).join("/")} in ${part.otherRegions
+                                    .map((r) => r.region)
+                                    .join("/")} (not counted)`}
+                              </p>
+                            )}
+                          </div>
                         </div>
                       </Link>
                     </TableCell>
@@ -206,7 +296,7 @@ export default async function BuildDetailPage({ params }: { params: Promise<{ id
                       <>
                         <TableCell className="font-medium tabular-nums">{part.observedStock.toLocaleString()}</TableCell>
                         <TableCell className={isBottleneck ? "font-semibold text-destructive" : "font-medium"}>
-                          {part.coverageRatio != null ? `${(part.coverageRatio * 100).toFixed(0)}%` : "—"}
+                          {part.coverageRatio != null ? `${Math.min(100, Math.round(part.coverageRatio * 100))}%` : "—"}
                         </TableCell>
                         <TableCell>{part.leadTimeWeeks != null ? `${part.leadTimeWeeks} wks` : "—"}</TableCell>
                         <TableCell>{part.marketingStatus ?? "—"}</TableCell>
