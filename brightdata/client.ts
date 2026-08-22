@@ -211,10 +211,75 @@ export async function searchWeb(query: string): Promise<unknown> {
   }
 }
 
-/** Heals a collector in place from a natural-language description of what broke. */
+type HealProgress = {
+  status?: string;
+  preview_result?: unknown;
+  [key: string]: unknown;
+};
+
+/**
+ * Builds the self-healing input explicitly. The Bright Data CLI currently accepts
+ * `--url`, but only uses it when printing the suggested follow-up command; its
+ * refactor request sends `custom_input: []`. For collectors shared by many product
+ * pages, that makes the AI repair and preview whichever sample URL is stored on the
+ * collector instead of the broken source target.
+ */
+export function buildHealRequest(url: string, prompt: string) {
+  return { prompt, custom_input: [{ url }] };
+}
+
+/** Heals a collector against the exact source-target URL and returns its gated preview. */
 export async function healScraper(collectorId: string, url: string, prompt: string): Promise<unknown> {
-  const stdout = await runCli(["scraper", "heal", collectorId, prompt, "--url", url]);
-  return JSON.parse(stdout);
+  const key = apiKey();
+  const headers = { Authorization: `Bearer ${key}`, "Content-Type": "application/json" };
+  const endpoint = `${API_BASE}/dca/collectors/${encodeURIComponent(collectorId)}/refactor_template`;
+
+  const trigger = await fetch(endpoint, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(buildHealRequest(url, prompt)),
+  });
+  const triggerText = await trigger.text();
+  if (!trigger.ok) {
+    throw new Error(
+      `Failed to start Bright Data self-healing for collector ${collectorId}: ` +
+        `${trigger.status} ${redactKey(triggerText.slice(0, 500), key)}`,
+    );
+  }
+
+  const progressUrl = `${endpoint}/progress`;
+  while (true) {
+    const progressResponse = await fetch(progressUrl, { headers });
+    const progressText = await progressResponse.text();
+    if (!progressResponse.ok) {
+      throw new Error(
+        `Failed to poll Bright Data self-healing for collector ${collectorId}: ` +
+          `${progressResponse.status} ${redactKey(progressText.slice(0, 500), key)}`,
+      );
+    }
+
+    let progress: HealProgress;
+    try {
+      progress = JSON.parse(progressText) as HealProgress;
+    } catch {
+      throw new Error(
+        `Bright Data self-healing progress for collector ${collectorId} was not valid JSON: ` +
+          progressText.slice(0, 500),
+      );
+    }
+
+    if (progress.status === "pending_answer") {
+      return { ...progress, status: "awaiting_approval" };
+    }
+    if (["done", "failed", "error", "cancelled"].includes(progress.status ?? "")) {
+      if (progress.status !== "done") {
+        throw new Error(`Bright Data self-healing failed for collector ${collectorId} (status: ${progress.status})`);
+      }
+      return progress;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+  }
 }
 
 /**
