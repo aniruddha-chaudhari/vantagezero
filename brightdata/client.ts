@@ -211,11 +211,34 @@ export async function searchWeb(query: string): Promise<unknown> {
   }
 }
 
-type HealProgress = {
+export type HealProgress = {
+  id?: string;
+  step?: string;
+  completed_steps?: string[];
   status?: string;
   preview_result?: unknown;
   [key: string]: unknown;
 };
+
+const MAX_CODE_FIXER_ATTEMPTS = 2;
+
+export function describeHealFailure(progress: HealProgress): string {
+  const details = [
+    `status: ${progress.status ?? "unknown"}`,
+    progress.step ? `step: ${progress.step}` : null,
+    progress.id ? `job: ${progress.id}` : null,
+    progress.completed_steps?.length ? `completed: ${progress.completed_steps.join(", ")}` : null,
+  ].filter(Boolean);
+  return details.join("; ");
+}
+
+export function shouldRetryHealFailure(progress: HealProgress, attempt: number): boolean {
+  return (
+    attempt < MAX_CODE_FIXER_ATTEMPTS &&
+    progress.step === "code_fixer" &&
+    (progress.status === "error" || progress.status === "failed")
+  );
+}
 
 /**
  * Builds the self-healing input explicitly. The Bright Data CLI currently accepts
@@ -228,10 +251,13 @@ export function buildHealRequest(url: string, prompt: string) {
   return { prompt, custom_input: [{ url }] };
 }
 
-/** Heals a collector against the exact source-target URL and returns its gated preview. */
-export async function healScraper(collectorId: string, url: string, prompt: string): Promise<unknown> {
-  const key = apiKey();
-  const headers = { Authorization: `Bearer ${key}`, "Content-Type": "application/json" };
+async function runHealAttempt(
+  collectorId: string,
+  url: string,
+  prompt: string,
+  key: string,
+  headers: Record<string, string>,
+): Promise<HealProgress> {
   const endpoint = `${API_BASE}/dca/collectors/${encodeURIComponent(collectorId)}/refactor_template`;
 
   const trigger = await fetch(endpoint, {
@@ -272,14 +298,42 @@ export async function healScraper(collectorId: string, url: string, prompt: stri
       return { ...progress, status: "awaiting_approval" };
     }
     if (["done", "failed", "error", "cancelled"].includes(progress.status ?? "")) {
-      if (progress.status !== "done") {
-        throw new Error(`Bright Data self-healing failed for collector ${collectorId} (status: ${progress.status})`);
-      }
       return progress;
     }
 
     await new Promise((resolve) => setTimeout(resolve, 1_000));
   }
+}
+
+/**
+ * Heals a collector against the exact source-target URL and returns its gated preview.
+ * Bright Data can occasionally finish planning and the control preview, then fail internally
+ * in `code_fixer` without producing a candidate. That terminal state is safe to retry because
+ * no draft or production version exists yet. Retry it once; never retry a pending approval,
+ * cancellation, HTTP error, or a failure in an unknown stage.
+ */
+export async function healScraper(collectorId: string, url: string, prompt: string): Promise<unknown> {
+  const key = apiKey();
+  const headers = { Authorization: `Bearer ${key}`, "Content-Type": "application/json" };
+
+  for (let attempt = 1; attempt <= MAX_CODE_FIXER_ATTEMPTS; attempt++) {
+    const progress = await runHealAttempt(collectorId, url, prompt, key, headers);
+    if (progress.status === "done" || progress.status === "awaiting_approval") return progress;
+
+    if (shouldRetryHealFailure(progress, attempt)) {
+      console.warn(
+        `Bright Data self-healing ended before producing a candidate (${describeHealFailure(progress)}); ` +
+          `retrying once...`,
+      );
+      continue;
+    }
+
+    throw new Error(
+      `Bright Data self-healing failed for collector ${collectorId} (${describeHealFailure(progress)})`,
+    );
+  }
+
+  throw new Error(`Bright Data self-healing failed for collector ${collectorId} after retrying code_fixer`);
 }
 
 /**
