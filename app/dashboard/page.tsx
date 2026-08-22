@@ -35,6 +35,10 @@ function daysUntil(shipDate: string): number {
   return Math.round((target.getTime() - today.getTime()) / 86_400_000);
 }
 
+/** Live monitoring surface: never prerendered, never cached. Observations land from the
+ * cron between requests, so a build-time snapshot would show a stale buildable number. */
+export const dynamic = "force-dynamic";
+
 export default async function OverviewPage() {
   const sessionId = await readSessionId();
   const [builds, events, catalog] = await Promise.all([

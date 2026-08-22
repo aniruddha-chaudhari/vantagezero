@@ -30,6 +30,10 @@ function RiskBadge({ level }: { level: RiskLevel }) {
   return <Badge variant="destructive">critical</Badge>;
 }
 
+/** Live monitoring surface: never prerendered, never cached. Observations land from the
+ * cron between requests, so a build-time snapshot would show a stale buildable number. */
+export const dynamic = "force-dynamic";
+
 export default async function BuildDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const sessionId = await readSessionId();

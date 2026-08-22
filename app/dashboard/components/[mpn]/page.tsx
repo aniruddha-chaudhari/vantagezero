@@ -30,6 +30,10 @@ function FreshnessBadge({ state }: { state: "fresh" | "stale" }) {
   );
 }
 
+/** Live monitoring surface: never prerendered, never cached. Observations land from the
+ * cron between requests, so a build-time snapshot would show a stale buildable number. */
+export const dynamic = "force-dynamic";
+
 export default async function ComponentDetailPage({
   params,
   searchParams,

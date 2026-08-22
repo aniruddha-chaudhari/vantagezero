@@ -21,6 +21,10 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+/** Live monitoring surface: never prerendered, never cached. Observations land from the
+ * cron between requests, so a build-time snapshot would show a stale buildable number. */
+export const dynamic = "force-dynamic";
+
 export default async function SourcesPage() {
   const [collectors, incidents, passRate, stats] = await Promise.all([
     listSourceHealth(),

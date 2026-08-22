@@ -18,6 +18,10 @@ function money(value: number, currency: string): string {
   return symbol ? `${symbol}${formatted}` : `${formatted} ${currency}`;
 }
 
+/** Live monitoring surface: never prerendered, never cached. Observations land from the
+ * cron between requests, so a build-time snapshot would show a stale buildable number. */
+export const dynamic = "force-dynamic";
+
 export default async function PricingPage({
   searchParams,
 }: {
