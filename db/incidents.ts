@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 
 import { approveHeal } from "@/brightdata/client";
 import type { LastValidDistributorSnapshot, LastValidManufacturerSnapshot } from "@/brightdata/heal";
@@ -35,13 +35,24 @@ export interface OpenIncidentSummary {
   ineligibleReason: string | null;
 }
 
-/** Open incidents plus the rate-discipline facts (§12) a caller needs to decide whether to heal. */
-export async function listOpenIncidentsForHealing(): Promise<OpenIncidentSummary[]> {
+/**
+ * Open incidents plus the rate-discipline facts (§12) a caller needs to decide whether to
+ * heal. Runs one extra query per incident (recent scrape_runs, for the consecutive-failure
+ * count), so pass `sourceTargetIds` whenever the caller only cares about a handful of
+ * specific targets - e.g. the refresh route only needs the ones it just touched, not every
+ * open incident in the system. Omit it for the full picture (the CI heal loop, the incidents
+ * dashboard).
+ */
+export async function listOpenIncidentsForHealing(sourceTargetIds?: string[]): Promise<OpenIncidentSummary[]> {
   const incidents = await db
     .select({ incident: scraperIncidents, target: sourceTargets })
     .from(scraperIncidents)
     .innerJoin(sourceTargets, eq(scraperIncidents.sourceTargetId, sourceTargets.id))
-    .where(eq(scraperIncidents.status, "open"));
+    .where(
+      sourceTargetIds
+        ? and(eq(scraperIncidents.status, "open"), inArray(scraperIncidents.sourceTargetId, sourceTargetIds))
+        : eq(scraperIncidents.status, "open"),
+    );
 
   const results: OpenIncidentSummary[] = [];
 

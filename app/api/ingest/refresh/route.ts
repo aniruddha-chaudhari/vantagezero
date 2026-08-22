@@ -57,7 +57,7 @@ export async function POST(request: Request) {
   const failedTargetIds = new Set(results.filter((r) => !r.ok).map((r) => r.sourceTargetId));
   let healsTriggered = 0;
   if (failedTargetIds.size > 0) {
-    const openIncidents = await listOpenIncidentsForHealing();
+    const openIncidents = await listOpenIncidentsForHealing([...failedTargetIds]);
     const eligibleTargetIds = new Set(
       openIncidents.filter((inc) => failedTargetIds.has(inc.sourceTargetId) && inc.eligibleForAutoHeal).map((inc) => inc.sourceTargetId),
     );
