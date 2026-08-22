@@ -50,7 +50,7 @@ export const incidentStatusEnum = pgEnum("incident_status", [
   "resolved",
 ]);
 
-export const triggeredByEnum = pgEnum("triggered_by", ["manual", "cron", "judge"]);
+export const triggeredByEnum = pgEnum("triggered_by", ["manual", "cron", "judge", "webhook"]);
 
 export const incidentResolutionEnum = pgEnum("incident_resolution", [
   "auto_approved",

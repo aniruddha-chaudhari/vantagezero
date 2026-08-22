@@ -20,7 +20,7 @@ import { validateDistributorObservation, validateManufacturerObservation } from 
 import { sendSlackAlert } from "@/lib/slack";
 
 type SourceTarget = InferSelectModel<typeof sourceTargets>;
-export type TriggeredBy = "manual" | "cron" | "judge";
+export type TriggeredBy = "manual" | "cron" | "judge" | "webhook";
 
 export interface IngestResult {
   sourceTargetId: string;
@@ -30,20 +30,67 @@ export interface IngestResult {
   detail: string;
 }
 
+async function loadTarget(sourceTargetId: string): Promise<SourceTarget & { collectorId: string }> {
+  const [target] = await db.select().from(sourceTargets).where(eq(sourceTargets.id, sourceTargetId));
+  if (!target) throw new Error(`source target ${sourceTargetId} not found`);
+  if (!target.collectorId) throw new Error(`source target ${sourceTargetId} has no collector_id yet`);
+  return target as SourceTarget & { collectorId: string };
+}
+
+async function failRun(target: SourceTarget, scrapeRunId: string, code: string, message: string): Promise<IngestResult> {
+  await db
+    .update(scrapeRuns)
+    .set({ status: "failed", validationStatus: "invalid", finishedAt: new Date(), errorSummary: message })
+    .where(eq(scrapeRuns.id, scrapeRunId));
+
+  await db.insert(scraperIncidents).values({
+    sourceTargetId: target.id,
+    collectorId: target.collectorId,
+    incidentType: code,
+    status: "open",
+    notes: message,
+  });
+
+  return { sourceTargetId: target.id, mpn: target.mpn, supplier: target.sourceName, ok: false, detail: message };
+}
+
 /**
- * Runs one source target's collector, validates the result, and writes exactly
- * one of: a fresh observation row (+ price_breaks for distributors), or a
- * scraper_incidents row. Never both, never neither, never a fabricated zero.
- * Shared by the CLI script, the catalog resolver, and the ingestion API route
- * so there is one implementation of this logic, not three.
+ * Validates one already-scraped payload and writes exactly one of: a fresh observation row
+ * (+ price_breaks for distributors), or a scraper_incidents row. Never both, never neither,
+ * never a fabricated zero. Shared by both entry points below so there is one implementation
+ * of "is this payload trustworthy," not two - the only thing that differs between a CLI run
+ * and a Scraper Studio webhook delivery is where `raw` came from, never what happens to it.
+ */
+async function finalizeIngest(target: SourceTarget, scrapeRunId: string, raw: unknown): Promise<IngestResult> {
+  try {
+    const detail =
+      target.sourceType === "manufacturer"
+        ? await ingestManufacturer(target, raw, scrapeRunId)
+        : await ingestDistributor(target, raw, scrapeRunId);
+
+    await db
+      .update(scrapeRuns)
+      .set({ status: "success", validationStatus: "valid", finishedAt: new Date() })
+      .where(eq(scrapeRuns.id, scrapeRunId));
+
+    return { sourceTargetId: target.id, mpn: target.mpn, supplier: target.sourceName, ok: true, detail };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const code = err instanceof VantageValidationError ? err.code : "UNKNOWN_INGEST_ERROR";
+    return failRun(target, scrapeRunId, code, message);
+  }
+}
+
+/**
+ * Runs one source target's collector via the `bdata` CLI, then finalizes the result.
+ * Used by the CLI script, the catalog resolver, and the local/judge-triggered API route -
+ * anywhere the process itself is expected to invoke the collector.
  */
 export async function ingestSourceTarget(
   sourceTargetId: string,
   opts: { triggeredBy: TriggeredBy } = { triggeredBy: "manual" },
 ): Promise<IngestResult> {
-  const [target] = await db.select().from(sourceTargets).where(eq(sourceTargets.id, sourceTargetId));
-  if (!target) throw new Error(`source target ${sourceTargetId} not found`);
-  if (!target.collectorId) throw new Error(`source target ${sourceTargetId} has no collector_id yet`);
+  const target = await loadTarget(sourceTargetId);
 
   const [run] = await db
     .insert(scrapeRuns)
@@ -52,37 +99,28 @@ export async function ingestSourceTarget(
 
   try {
     const result = await runScraper(target.collectorId, target.sourceUrl);
-
-    const detail =
-      target.sourceType === "manufacturer"
-        ? await ingestManufacturer(target, result.raw, run.id)
-        : await ingestDistributor(target, result.raw, run.id);
-
-    await db
-      .update(scrapeRuns)
-      .set({ status: "success", validationStatus: "valid", finishedAt: new Date() })
-      .where(eq(scrapeRuns.id, run.id));
-
-    return { sourceTargetId: target.id, mpn: target.mpn, supplier: target.sourceName, ok: true, detail };
+    return await finalizeIngest(target, run.id, result.raw);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    const code = err instanceof VantageValidationError ? err.code : "UNKNOWN_INGEST_ERROR";
-
-    await db
-      .update(scrapeRuns)
-      .set({ status: "failed", validationStatus: "invalid", finishedAt: new Date(), errorSummary: message })
-      .where(eq(scrapeRuns.id, run.id));
-
-    await db.insert(scraperIncidents).values({
-      sourceTargetId: target.id,
-      collectorId: target.collectorId,
-      incidentType: code,
-      status: "open",
-      notes: message,
-    });
-
-    return { sourceTargetId: target.id, mpn: target.mpn, supplier: target.sourceName, ok: false, detail: message };
+    return failRun(target, run.id, "UNKNOWN_INGEST_ERROR", message);
   }
+}
+
+/**
+ * Ingests a payload Bright Data already scraped and pushed to us - a Scraper Studio
+ * scheduled run delivering via webhook. No CLI call: the collector ran on Bright Data's own
+ * infra, so this is the one ingestion path that works unmodified inside a stock serverless
+ * function (no writable filesystem or npm install needed at request time).
+ */
+export async function ingestWebhookPayload(sourceTargetId: string, raw: unknown): Promise<IngestResult> {
+  const target = await loadTarget(sourceTargetId);
+
+  const [run] = await db
+    .insert(scrapeRuns)
+    .values({ sourceTargetId: target.id, status: "running", triggeredBy: "webhook" })
+    .returning();
+
+  return finalizeIngest(target, run.id, raw);
 }
 
 /** Writes business_events for real changes, then checks whether any product that monitors
