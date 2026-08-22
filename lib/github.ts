@@ -1,5 +1,41 @@
 const REPO = "aniruddha-chaudhari/vantagezero";
 
+async function dispatchWorkflow(workflowFile: string, inputs: Record<string, string>): Promise<boolean> {
+  const token = process.env.GITHUB_TOKEN;
+  if (!token) return false;
+
+  const res = await fetch(`https://api.github.com/repos/${REPO}/actions/workflows/${workflowFile}/dispatches`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+    body: JSON.stringify({ ref: "main", inputs }),
+  });
+
+  return res.status === 204;
+}
+
+/**
+ * Dispatches the Collect workflow scoped to specific MPNs - what "Refresh data" actually
+ * triggers now. Collection cannot run synchronously inside this app: a multi-source refresh
+ * genuinely took over two minutes against live Bright Data and hit Vercel's hard function
+ * timeout (FUNCTION_INVOCATION_TIMEOUT), which surfaces to the browser as a platform HTML
+ * error page instead of JSON - not a bug in the ingest logic, a mismatch between "scraping
+ * takes as long as it takes" and "a serverless request has a ceiling." The Actions runner has
+ * no such ceiling.
+ *
+ * This also means the button no longer waits for a result inline - it triggers a real run and
+ * the UI points at the Actions tab instead of blocking on a response. And because Collect
+ * finishing automatically triggers Heal via workflow_run (already proven working), a
+ * genuinely heal-worthy failure from this scoped run gets healed the same way a full cron
+ * cycle's failures do - no separate heal-dispatch logic needed here anymore.
+ */
+export async function dispatchCollectWorkflow(mpns: string[]): Promise<boolean> {
+  return dispatchWorkflow("collect.yml", { mpns: mpns.join(",") });
+}
+
 /**
  * Dispatches the Heal GitHub Actions workflow for one source target - the same workflow the
  * Collect cron triggers automatically, just fired on demand instead of waiting for the next
@@ -15,18 +51,5 @@ const REPO = "aniruddha-chaudhari/vantagezero";
  * success path.
  */
 export async function dispatchHealWorkflow(sourceTargetId: string): Promise<boolean> {
-  const token = process.env.GITHUB_TOKEN;
-  if (!token) return false;
-
-  const res = await fetch(`https://api.github.com/repos/${REPO}/actions/workflows/heal.yml/dispatches`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/vnd.github+json",
-      "X-GitHub-Api-Version": "2022-11-28",
-    },
-    body: JSON.stringify({ ref: "main", inputs: { sourceTargetId } }),
-  });
-
-  return res.status === 204;
+  return dispatchWorkflow("heal.yml", { sourceTargetId });
 }

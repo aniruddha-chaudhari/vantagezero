@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 
 import { ingestSourceTarget } from "@/brightdata/ingestion";
 import { db } from "@/db/client";
+import { getSourceTargetIdsForMpns } from "@/db/queries";
 import { sourceTargets } from "@/db/schema";
 
 /**
@@ -9,6 +10,7 @@ import { sourceTargets } from "@/db/schema";
  *   npm run ingest -- <sourceTargetId>            one source target
  *   npm run ingest -- --all                       every enabled source target
  *   npm run ingest -- --all --concurrency 8       override the default parallelism
+ *   npm run ingest -- --mpns "NE555P,SN65HVD230DR"   every enabled source behind these MPNs
  *
  * Talks to the database directly (unlike scripts/heal-loop.ts, which only ever talks to
  * Vantage's own HTTP API) - collection genuinely needs DB access to run the collector and
@@ -58,23 +60,42 @@ async function main() {
   const argv = process.argv.slice(2);
   const arg = argv[0];
   if (!arg) {
-    throw new Error("usage: npm run ingest -- <sourceTargetId> | --all [--concurrency N]");
+    throw new Error('usage: npm run ingest -- <sourceTargetId> | --all | --mpns "A,B" [--concurrency N]');
   }
 
   const isAll = arg === "--all";
+  const isMpnList = arg === "--mpns";
+  const isBatch = isAll || isMpnList;
+
   const targetIds = isAll
     ? (await db.select({ id: sourceTargets.id }).from(sourceTargets).where(eq(sourceTargets.enabled, true))).map(
         (t) => t.id,
       )
-    : [arg];
+    : isMpnList
+      ? (
+          await getSourceTargetIdsForMpns(
+            (argv[1] ?? "")
+              .split(",")
+              .map((m) => m.trim())
+              .filter(Boolean),
+          )
+        ).map((t) => t.id)
+      : [arg];
 
+  if (isMpnList && targetIds.length === 0) {
+    throw new Error(`No trackable sources found for the given MPNs: "${argv[1] ?? ""}"`);
+  }
+
+  // --all is the real cron sweep, whether fired by the schedule or a manual workflow_dispatch
+  // of the same job; --mpns is specifically the scoped on-demand refresh, so it's tagged
+  // distinctly even though both are "batch" for concurrency purposes.
   const triggeredBy = isAll ? "cron" : "manual";
-  const concurrency = isAll ? readConcurrency(argv) : 1;
+  const concurrency = isBatch ? readConcurrency(argv) : 1;
 
   let failures = 0;
   let done = 0;
 
-  if (isAll) {
+  if (isBatch) {
     console.log(`Ingesting ${targetIds.length} source target(s) with concurrency ${concurrency}...`);
   }
 
@@ -83,7 +104,7 @@ async function main() {
     // ok:false - it does not throw - so one bad target can never abort the pool.
     const result = await ingestSourceTarget(sourceTargetId, { triggeredBy });
     done++;
-    const progress = isAll ? `[${done}/${targetIds.length}] ` : "";
+    const progress = isBatch ? `[${done}/${targetIds.length}] ` : "";
     if (result.ok) {
       console.log(`${progress}Observation stored:`, result);
     } else {
@@ -92,7 +113,7 @@ async function main() {
     }
   });
 
-  if (isAll) {
+  if (isBatch) {
     console.log(`\nProcessed ${targetIds.length} source target(s), ${failures} incident(s) opened.`);
   }
   // A collector incident is an expected, handled outcome (an incident row is written on

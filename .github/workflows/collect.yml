@@ -3,7 +3,11 @@ name: Collect
 on:
   schedule:
     - cron: "0 */6 * * *"
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      mpns:
+        description: "Comma-separated MPNs to refresh (optional - blank means every enabled source)"
+        required: false
 
 jobs:
   ingest:
@@ -18,4 +22,13 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           BRIGHTDATA_API_KEY: ${{ secrets.BRIGHTDATA_API_KEY }}
-        run: npx tsx scripts/ingest.ts --all
+          # Incidents and critical buildability alerts only - SLACK_ACTIVITY_FEED is
+          # deliberately left unset here so a full --all cycle doesn't burst one success
+          # line per source target into the channel and rate-limit the alerts that matter.
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          if [ -n "${{ github.event.inputs.mpns }}" ]; then
+            npx tsx scripts/ingest.ts --mpns "${{ github.event.inputs.mpns }}"
+          else
+            npx tsx scripts/ingest.ts --all
+          fi
