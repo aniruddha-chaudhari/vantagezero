@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { ingestSourceTarget } from "@/brightdata/ingestion";
+import { listOpenIncidentsForHealing } from "@/db/incidents";
 import { getSourceTargetIdsForMpns } from "@/db/queries";
+import { dispatchHealWorkflow } from "@/lib/github";
 
 /** Runs a handful of real collector calls sequentially-in-bounded-parallel - can take a while. */
 export const maxDuration = 120;
@@ -34,20 +36,38 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "No trackable sources found for the given parts" }, { status: 404 });
   }
 
-  const results: Array<{ mpn: string; sourceName: string; ok: boolean; detail: string }> = [];
+  const results: Array<{ sourceTargetId: string; mpn: string; sourceName: string; ok: boolean; detail: string }> = [];
   let cursor = 0;
   await Promise.all(
     Array.from({ length: Math.min(CONCURRENCY, targets.length) }, async () => {
       while (cursor < targets.length) {
         const target = targets[cursor++];
         const result = await ingestSourceTarget(target.id, { triggeredBy: "manual" });
-        results.push({ mpn: target.mpn, sourceName: target.sourceName, ok: result.ok, detail: result.detail });
+        results.push({ sourceTargetId: target.id, mpn: target.mpn, sourceName: target.sourceName, ok: result.ok, detail: result.detail });
       }
     }),
   );
 
+  // A refresh that just failed may have opened (or added to) an incident. Re-triggering a
+  // heal for every failure would be wrong - an identity mismatch or a page that's genuinely
+  // gone isn't fixed by regenerating extraction logic. Reuse the exact same eligibility check
+  // the real cron uses (heal-eligible incident type, not healed in the last 24h, at least two
+  // consecutive failures) so this only fires for the same cases production would - "genuinely
+  // null or wrong values", not every kind of failure.
+  const failedTargetIds = new Set(results.filter((r) => !r.ok).map((r) => r.sourceTargetId));
+  let healsTriggered = 0;
+  if (failedTargetIds.size > 0) {
+    const openIncidents = await listOpenIncidentsForHealing();
+    const eligibleTargetIds = new Set(
+      openIncidents.filter((inc) => failedTargetIds.has(inc.sourceTargetId) && inc.eligibleForAutoHeal).map((inc) => inc.sourceTargetId),
+    );
+    for (const id of eligibleTargetIds) {
+      if (await dispatchHealWorkflow(id)) healsTriggered++;
+    }
+  }
+
   return NextResponse.json({
-    summary: { total: results.length, ok: results.filter((r) => r.ok).length },
+    summary: { total: results.length, ok: results.filter((r) => r.ok).length, healsTriggered },
     results,
   });
 }

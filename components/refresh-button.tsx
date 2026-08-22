@@ -15,12 +15,14 @@ type Status = "idle" | "refreshing" | "done" | "error";
  * exact same validate-or-incident pipeline the cron uses, so a bad page still opens an
  * incident here rather than showing stale or fabricated data.
  *
- * Deliberately does not trigger a heal. Healing regenerates a collector's extraction logic
- * from an AI description of what broke - that's a template-authoring action gated behind the
- * four gates in domain/gates.ts, not a same-click data refresh, and Bright Data has no HTTP
- * equivalent to `bdata scraper heal` verified working from this app yet (only run and search
- * have one). A source that's actually broken surfaces here as a fresh incident, same as it
- * would from the cron - visible on /dashboard/sources, healed from there or from the CI loop.
+ * Healing itself still can't run inside this app - `bdata scraper heal` needs a writable
+ * filesystem and package resolution at request time, and Next.js sets NEXT_RUNTIME in every
+ * request context, dev or deployed, so there's no "just spawn the CLI" option here the way a
+ * plain script has. So a failure that's genuinely heal-worthy (a missing/null field, not an
+ * identity mismatch or a page that's gone) dispatches the real GitHub Actions Heal workflow -
+ * the same one the Collect cron triggers automatically - scoped to just that source target.
+ * Same eligibility rule as production: heal-eligible incident type, not healed in the last
+ * 24h, at least two consecutive failures. See lib/github.ts and db/incidents.ts.
  */
 export function RefreshButton({ mpns }: { mpns: string[] }) {
   const router = useRouter();
@@ -38,8 +40,10 @@ export function RefreshButton({ mpns }: { mpns: string[] }) {
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "Refresh failed");
-      const { total, ok } = body.summary as { total: number; ok: number };
-      setMessage(ok === total ? `${ok}/${total} sources updated` : `${ok}/${total} updated - ${total - ok} opened an incident`);
+      const { total, ok, healsTriggered } = body.summary as { total: number; ok: number; healsTriggered: number };
+      const parts = [ok === total ? `${ok}/${total} sources updated` : `${ok}/${total} updated - ${total - ok} opened an incident`];
+      if (healsTriggered > 0) parts.push(`heal triggered in CI for ${healsTriggered}`);
+      setMessage(parts.join(" — "));
       setStatus("done");
       router.refresh();
     } catch (err) {
