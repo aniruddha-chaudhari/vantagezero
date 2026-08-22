@@ -30,6 +30,9 @@ export function normalizeDistributorRaw(raw: unknown, target: NormalizationTarge
   if (target.sourceName === "DigiKey") {
     return normalizeDigikey(raw, target);
   }
+  if (target.sourceName === "LCSC") {
+    return normalizeLcsc(raw, target);
+  }
   throw new SourceUnsupported(`No normalizer registered for source "${target.sourceName}"`);
 }
 
@@ -49,9 +52,10 @@ function firstRow(raw: unknown): Record<string, unknown> {
   return row as Record<string, unknown>;
 }
 
-/** "1 - 9" -> 1, "10 - 24" -> 10, "250 +" -> 250 */
+/** "1 - 9" -> 1, "10 - 24" -> 10, "250 +" -> 250, "1,000 +" -> 1000 (comma stripped first,
+ * since a bare \d+ match would otherwise stop at the comma and return 1). */
 function parseMinQtyFromRange(range: string): number {
-  const match = range.match(/\d+/);
+  const match = range.replace(/,/g, "").match(/\d+/);
   if (!match) throw new SchemaValidationFailed(`Could not parse a minimum quantity from price-break range "${range}"`);
   return Number(match[0]);
 }
@@ -227,6 +231,57 @@ function normalizeDigikey(raw: unknown, target: NormalizationTarget): Distributo
     orderMultiple: typeof row.order_multiple === "number" ? row.order_multiple : 1,
     priceBreaks,
     package: null,
+    technical: undefined,
+  };
+}
+
+/**
+ * Actual LCSC PDP collector output (c_mt44s8op4nh52dumy), captured 2026-08-22 against
+ * https://www.lcsc.com/product-detail/C8734.html: { mpn, manufacturer, lcsc_part_number,
+ * in_stock_quantity, package, minimum_order_quantity, order_multiple, currency (already ISO,
+ * "USD" - LCSC prices internationally in USD despite being a China-based distributor),
+ * price_breaks: [{ min_qty: "1 +" | "1,000 +", unit_price: {value, currency, symbol} }],
+ * product_image_url, input }. Cleanest of the four collectors so far: minimum_order_quantity
+ * and order_multiple are always present (unlike DigiKey, which only renders them for
+ * reel/tube-packaged parts), so no 1-as-default fallback is needed here.
+ */
+function normalizeLcsc(raw: unknown, target: NormalizationTarget): DistributorObservationInput {
+  const row = firstRow(raw);
+
+  if (row.mpn == null || row.in_stock_quantity == null || row.currency == null) {
+    throw new MissingRequiredField("LCSC output is missing a required field (mpn, in_stock_quantity, or currency)");
+  }
+
+  const priceBreaks = Array.isArray(row.price_breaks)
+    ? (row.price_breaks as Array<Record<string, unknown>>).map((pb) => {
+        const priceObj = pb.unit_price as { value?: number } | undefined;
+        if (priceObj?.value == null) {
+          throw new MissingRequiredField("Price break is missing unit_price.value");
+        }
+        return { minQty: parseMinQtyFromRange(String(pb.min_qty ?? "")), unitPrice: Number(priceObj.value) };
+      })
+    : [];
+
+  return {
+    mpn: String(row.mpn),
+    manufacturer: (row.manufacturer as string) ?? null,
+    sourceType: "distributor",
+    supplier: "LCSC",
+    supplierSku: (row.lcsc_part_number as string) ?? null,
+    sourceUrl: target.sourceUrl,
+    region: target.region,
+    imageUrl: (row.product_image_url as string) ?? null,
+    stock: Number(row.in_stock_quantity),
+    incoming: null,
+    incomingDate: null,
+    availabilityText: null,
+    deliveryText: null,
+    leadTimeWeeks: null,
+    currency: String(row.currency),
+    minimumOrderQty: typeof row.minimum_order_quantity === "number" ? row.minimum_order_quantity : 1,
+    orderMultiple: typeof row.order_multiple === "number" ? row.order_multiple : 1,
+    priceBreaks,
+    package: (row.package as string) ?? null,
     technical: undefined,
   };
 }

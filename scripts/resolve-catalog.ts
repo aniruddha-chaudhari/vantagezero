@@ -10,17 +10,21 @@ interface DistributorTarget {
   sourceName: string;
   domain: string;
   pathMustInclude: string[];
+  region: string;
 }
 
 const DISTRIBUTORS: DistributorTarget[] = [
-  { sourceName: "RS Online", domain: "uk.rs-online.com", pathMustInclude: ["/web/p/"] },
-  { sourceName: "element14", domain: "uk.farnell.com", pathMustInclude: ["/dp/"] },
+  { sourceName: "RS Online", domain: "uk.rs-online.com", pathMustInclude: ["/web/p/"], region: "UK" },
+  { sourceName: "element14", domain: "uk.farnell.com", pathMustInclude: ["/dp/"], region: "UK" },
+  { sourceName: "DigiKey", domain: "www.digikey.in", pathMustInclude: ["/en/products/detail/"], region: "India" },
+  { sourceName: "LCSC", domain: "www.lcsc.com", pathMustInclude: ["/product-detail/"], region: "China" },
 ];
 
 const MANUFACTURER: DistributorTarget = {
   sourceName: "STMicroelectronics",
   domain: "www.st.com",
   pathMustInclude: ["/en/", ".html"],
+  region: "UK",
 };
 
 interface SearchResult {
@@ -83,7 +87,7 @@ async function resolveOne(mpn: string, target: DistributorTarget, sourceType: "d
       sourceName: target.sourceName,
       sourceType,
       sourceUrl: url,
-      region: "UK",
+      region: target.region,
       collectorId,
       enabled: true,
       inCatalog: true,
