@@ -1,6 +1,7 @@
 import {
   boolean,
   date,
+  index,
   integer,
   jsonb,
   numeric,
@@ -67,7 +68,7 @@ export const products = pgTable("products", {
   plannedBuildQty: integer("planned_build_qty").notNull(),
   shipDate: date("ship_date"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
+}, (table) => [index("products_session_idx").on(table.sessionId)]);
 
 /** One BOM line: a part required by a product. */
 export const bomItems = pgTable("bom_items", {
@@ -81,7 +82,7 @@ export const bomItems = pgTable("bom_items", {
   criticality: criticalityEnum("criticality").notNull().default("important"),
   /** Only monitored parts feed the buildable-units min(). Unmonitored rows render "- not tracked". */
   monitored: boolean("monitored").notNull().default(true),
-});
+}, (table) => [index("bom_items_product_idx").on(table.productId), index("bom_items_mpn_idx").on(table.mpn)]);
 
 /**
  * Global registry keyed on (mpn, source_url) - not per-product. Two judges tracking the
@@ -98,7 +99,10 @@ export const sourceTargets = pgTable("source_targets", {
   enabled: boolean("enabled").notNull().default(true),
   inCatalog: boolean("in_catalog").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
+}, (table) => [
+  index("source_targets_mpn_type_idx").on(table.mpn, table.sourceType),
+  index("source_targets_collector_idx").on(table.collectorId),
+]);
 
 /** One Bright Data collector invocation against one source target. */
 export const scrapeRuns = pgTable("scrape_runs", {
@@ -113,7 +117,7 @@ export const scrapeRuns = pgTable("scrape_runs", {
   validationStatus: validationStatusEnum("validation_status").notNull().default("pending"),
   errorSummary: text("error_summary"),
   triggeredBy: triggeredByEnum("triggered_by").notNull().default("manual"),
-});
+}, (table) => [index("scrape_runs_target_started_idx").on(table.sourceTargetId, table.startedAt.desc())]);
 
 /**
  * Immutable distributor observation snapshot. Never updated - every run is a new row.
@@ -138,7 +142,10 @@ export const componentObservations = pgTable("component_observations", {
   orderMultiple: integer("order_multiple").notNull().default(1),
   imageUrl: text("image_url"),
   rawNormalizedJson: jsonb("raw_normalized_json").notNull(),
-});
+}, (table) => [
+  // Serves the "newest observation for this source target" lateral the read path leans on.
+  index("component_observations_target_observed_idx").on(table.sourceTargetId, table.observedAt.desc()),
+]);
 
 export const priceBreaks = pgTable("price_breaks", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -148,7 +155,7 @@ export const priceBreaks = pgTable("price_breaks", {
   minQty: integer("min_qty").notNull(),
   unitPrice: numeric("unit_price", { precision: 12, scale: 4 }).notNull(),
   currency: text("currency").notNull(),
-});
+}, (table) => [index("price_breaks_observation_idx").on(table.observationId, table.minQty)]);
 
 /** Immutable manufacturer lifecycle observation snapshot. Never updated. */
 export const lifecycleObservations = pgTable("lifecycle_observations", {
@@ -165,7 +172,9 @@ export const lifecycleObservations = pgTable("lifecycle_observations", {
   longevityStartDate: date("longevity_start_date"),
   package: text("package"),
   grade: text("grade"),
-});
+}, (table) => [
+  index("lifecycle_observations_target_observed_idx").on(table.sourceTargetId, table.observedAt.desc()),
+]);
 
 /** Semantic supply-chain change events (stock moves, lead time, lifecycle, price). */
 export const businessEvents = pgTable("business_events", {
@@ -178,7 +187,7 @@ export const businessEvents = pgTable("business_events", {
   afterJson: jsonb("after_json"),
   message: text("message").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
+}, (table) => [index("business_events_created_idx").on(table.createdAt.desc())]);
 
 /** Structural/reliability incidents - detect, heal, approve/reject, resolve. */
 export const scraperIncidents = pgTable("scraper_incidents", {
@@ -200,4 +209,7 @@ export const scraperIncidents = pgTable("scraper_incidents", {
   gateResultsJson: jsonb("gate_results_json"),
   resolution: incidentResolutionEnum("resolution"),
   notes: text("notes"),
-});
+}, (table) => [
+  index("scraper_incidents_target_idx").on(table.sourceTargetId),
+  index("scraper_incidents_opened_idx").on(table.openedAt.desc()),
+]);

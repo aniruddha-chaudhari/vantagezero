@@ -1,10 +1,14 @@
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 
 import { db } from "@/db/client";
-import { componentObservations, priceBreaks, scrapeRuns, sourceTargets } from "@/db/schema";
 import { renderStateForObservation } from "@/domain/freshness";
 
-import { getLatestLifecycleByMpn } from "./queries";
+import {
+  getLatestLifecycleByMpn,
+  latestDistributorObservationsForMpns,
+  listLatestDistributorObservations,
+  type LatestDistributorObservation,
+} from "./queries";
 
 /** Headline counts for the impact strip (master-plan §23 - "quantify everything"). */
 export interface PlatformStats {
@@ -23,6 +27,7 @@ export interface PlatformStats {
 export async function getPlatformStats(): Promise<PlatformStats> {
   const rows = await db.execute<{
     collectors: string;
+    domains: string;
     regions: string;
     tracked_mpns: string;
     observations: string;
@@ -34,6 +39,10 @@ export async function getPlatformStats(): Promise<PlatformStats> {
   }>(sql`
     select
       (select count(distinct collector_id) from source_targets where collector_id is not null) collectors,
+      -- hostname of each source_url, counted in Postgres rather than fetching every URL to
+      -- de-duplicate them in JS. Strips scheme, path and any port, matching URL.hostname.
+      (select count(distinct split_part(split_part(split_part(source_url, '//', 2), '/', 1), ':', 1))
+         from source_targets) domains,
       (select count(distinct region) from source_targets where region is not null) regions,
       (select count(distinct mpn) from source_targets) tracked_mpns,
       (select count(*) from component_observations)
@@ -46,16 +55,7 @@ export async function getPlatformStats(): Promise<PlatformStats> {
   `);
   const row = rows[0];
 
-  const domains = new Set(
-    (await db.select({ url: sourceTargets.sourceUrl }).from(sourceTargets)).map((r) => {
-      try {
-        return new URL(r.url).hostname;
-      } catch {
-        return r.url;
-      }
-    }),
-  ).size;
-
+  const domains = Number(row.domains);
   const collectorRuns = Number(row.collector_runs);
   return {
     collectors: Number(row.collectors),
@@ -89,62 +89,40 @@ export interface CatalogEntry {
   freshness: "fresh" | "stale" | null;
 }
 
-/** The whole tracked catalog in one pass - the portfolio view's data source. */
+/**
+ * The whole tracked catalog in one pass - the portfolio view's data source.
+ *
+ * Two queries, issued together: latest-observation-per-supplier (price ladder included) and
+ * latest lifecycle status. It used to be five, chained - targets, observations, price breaks,
+ * then two more inside the lifecycle lookup - which on Vercel meant five sequential network
+ * hops to the database region before a single card could render.
+ */
 export async function listCatalog(): Promise<CatalogEntry[]> {
-  const targets = await db.select().from(sourceTargets);
-  const distributorTargets = targets.filter((t) => t.sourceType === "distributor");
-  if (distributorTargets.length === 0) return [];
-
-  const obs = await db
-    .select()
-    .from(componentObservations)
-    .where(
-      inArray(
-        componentObservations.sourceTargetId,
-        distributorTargets.map((t) => t.id),
-      ),
-    )
-    .orderBy(desc(componentObservations.observedAt));
-
-  // Latest observation per source target, so a part on 3 storefronts counts each exactly once.
-  const latestByTarget = new Map<string, (typeof obs)[number]>();
-  for (const o of obs) if (!latestByTarget.has(o.sourceTargetId)) latestByTarget.set(o.sourceTargetId, o);
-
-  const observationIds = [...latestByTarget.values()].map((o) => o.id);
-  const breaks = observationIds.length
-    ? await db.select().from(priceBreaks).where(inArray(priceBreaks.observationId, observationIds))
-    : [];
-  const breaksByObservation = new Map<string, typeof breaks>();
-  for (const b of breaks) {
-    const list = breaksByObservation.get(b.observationId) ?? [];
-    list.push(b);
-    breaksByObservation.set(b.observationId, list);
-  }
-
-  const lifecycleByMpn = await getLatestLifecycleByMpn([...new Set(targets.map((t) => t.mpn))]);
+  const [observations, lifecycleByMpn] = await Promise.all([
+    listLatestDistributorObservations(),
+    getLatestLifecycleByMpn(),
+  ]);
+  if (observations.length === 0) return [];
 
   const byMpn = new Map<string, CatalogEntry>();
-  for (const target of distributorTargets) {
-    const latest = latestByTarget.get(target.id);
-    if (!latest) continue; // no valid observation here - contributes nothing, never a zero
-
-    const entry: CatalogEntry = byMpn.get(target.mpn) ?? {
-      mpn: target.mpn,
+  for (const latest of observations) {
+    const entry: CatalogEntry = byMpn.get(latest.mpn) ?? {
+      mpn: latest.mpn,
       imageUrl: null,
       manufacturer: null,
       package: null,
       stockByRegion: [],
       supplierCount: 0,
       bestPrice: null,
-      marketingStatus: lifecycleByMpn.get(target.mpn)?.marketingStatus ?? null,
+      marketingStatus: lifecycleByMpn.get(latest.mpn)?.marketingStatus ?? null,
       lastObservedAt: null,
       freshness: null,
     };
 
-    const raw = latest.rawNormalizedJson as Record<string, unknown> | null;
+    const raw = latest.rawNormalizedJson;
     entry.supplierCount += 1;
 
-    const regionLabel = target.region ?? "unspecified";
+    const regionLabel = latest.region ?? "unspecified";
     const pool = entry.stockByRegion.find((r) => r.region === regionLabel);
     if (pool) {
       pool.stock += latest.stock;
@@ -161,20 +139,19 @@ export async function listCatalog(): Promise<CatalogEntry[]> {
       entry.freshness = renderStateForObservation(latest.observedAt);
     }
 
-    // Entry tier for this supplier. Only ever compared within a single currency.
-    const tiers = (breaksByObservation.get(latest.id) ?? []).slice().sort((a, b) => a.minQty - b.minQty);
-    const cheapest = tiers[0];
+    // Entry tier for this supplier - already ordered by min_qty. Only ever compared within
+    // a single currency.
+    const cheapest = latest.tiers[0];
     if (cheapest) {
-      const price = Number(cheapest.unitPrice);
       if (
         entry.bestPrice == null ||
-        (entry.bestPrice.currency === cheapest.currency && price < entry.bestPrice.unitPrice)
+        (entry.bestPrice.currency === cheapest.currency && cheapest.unitPrice < entry.bestPrice.unitPrice)
       ) {
-        entry.bestPrice = { unitPrice: price, currency: cheapest.currency, supplier: target.sourceName };
+        entry.bestPrice = { unitPrice: cheapest.unitPrice, currency: cheapest.currency, supplier: latest.sourceName };
       }
     }
 
-    byMpn.set(target.mpn, entry);
+    byMpn.set(latest.mpn, entry);
   }
 
   const entries = [...byMpn.values()];
@@ -199,44 +176,32 @@ export interface SupplierPriceCurve {
  * quantity. Prices stay in their own currency throughout - Vantage never converts, so a
  * GBP ladder and an INR ladder sit side by side, each labelled, never summed.
  */
+/** Shape one supplier's already-fetched observation into a price curve at `qty`. */
+function curveFromObservation(obs: LatestDistributorObservation, qty: number): SupplierPriceCurve | null {
+  const tiers = obs.tiers.map((t) => ({ minQty: t.minQty, unitPrice: t.unitPrice }));
+  if (tiers.length === 0) return null;
+
+  // Highest tier whose threshold this quantity actually reaches.
+  const applicable = tiers.filter((t) => t.minQty <= qty).pop() ?? null;
+
+  return {
+    supplier: obs.sourceName,
+    region: obs.region,
+    currency: obs.currency,
+    stock: obs.stock,
+    sourceUrl: obs.sourceUrl,
+    tiers,
+    unitPriceAtQty: applicable?.unitPrice ?? null,
+    lineTotalAtQty: applicable ? applicable.unitPrice * qty : null,
+  };
+}
+
 export async function getSupplierPriceCurves(mpn: string, qty: number): Promise<SupplierPriceCurve[]> {
-  const normalized = mpn.trim().toUpperCase();
-  const targets = await db
-    .select()
-    .from(sourceTargets)
-    .where(and(sql`upper(${sourceTargets.mpn}) = ${normalized}`, eq(sourceTargets.sourceType, "distributor")));
-
-  const curves: SupplierPriceCurve[] = [];
-  for (const target of targets) {
-    const [latest] = await db
-      .select()
-      .from(componentObservations)
-      .where(eq(componentObservations.sourceTargetId, target.id))
-      .orderBy(desc(componentObservations.observedAt))
-      .limit(1);
-    if (!latest) continue;
-
-    const tiers = (await db.select().from(priceBreaks).where(eq(priceBreaks.observationId, latest.id)))
-      .map((b) => ({ minQty: b.minQty, unitPrice: Number(b.unitPrice) }))
-      .sort((a, b) => a.minQty - b.minQty);
-    if (tiers.length === 0) continue;
-
-    // Highest tier whose threshold this quantity actually reaches.
-    const applicable = tiers.filter((t) => t.minQty <= qty).pop() ?? null;
-
-    curves.push({
-      supplier: target.sourceName,
-      region: target.region,
-      currency: latest.currency,
-      stock: latest.stock,
-      sourceUrl: target.sourceUrl,
-      tiers,
-      unitPriceAtQty: applicable?.unitPrice ?? null,
-      lineTotalAtQty: applicable ? applicable.unitPrice * qty : null,
-    });
-  }
-
-  return curves.sort((a, b) => a.supplier.localeCompare(b.supplier));
+  const observations = await latestDistributorObservationsForMpns([mpn]);
+  return observations
+    .map((obs) => curveFromObservation(obs, qty))
+    .filter((c): c is SupplierPriceCurve => c !== null)
+    .sort((a, b) => a.supplier.localeCompare(b.supplier));
 }
 
 /** MPNs that have price data from more than one supplier - the comparison view's candidates. */
@@ -276,8 +241,23 @@ export async function getBuildCostSummary(parts: Array<{ mpn: string; requiredQt
   const lines: BuildCostLine[] = [];
   const unpriced: string[] = [];
 
+  // Every part's suppliers and price ladders in a single query. This was the app's worst
+  // waterfall by a wide margin: one query per part to find its suppliers, then two more per
+  // supplier, all sequential - a 5-part BOM across 3 storefronts meant ~35 round trips
+  // before the build page could render its cost table.
+  const observations = await latestDistributorObservationsForMpns(parts.map((p) => p.mpn));
+  const byMpn = new Map<string, LatestDistributorObservation[]>();
+  for (const obs of observations) {
+    const key = obs.mpn.trim().toUpperCase();
+    const list = byMpn.get(key) ?? [];
+    list.push(obs);
+    byMpn.set(key, list);
+  }
+
   for (const part of parts) {
-    const curves = await getSupplierPriceCurves(part.mpn, part.requiredQty);
+    const curves = (byMpn.get(part.mpn.trim().toUpperCase()) ?? [])
+      .map((obs) => curveFromObservation(obs, part.requiredQty))
+      .filter((c): c is SupplierPriceCurve => c !== null);
     const priced = curves.filter((c) => c.lineTotalAtQty != null);
     if (priced.length === 0) {
       unpriced.push(part.mpn);
