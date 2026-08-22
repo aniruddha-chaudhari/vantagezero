@@ -9,16 +9,13 @@ jobs:
   ingest:
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger ingestion for all enabled sources
-        run: |
-          status=$(curl -s -o response.json -w "%{http_code}" -X POST \
-            "${{ secrets.APP_BASE_URL }}/api/ingest/brightdata" \
-            -H "Authorization: Bearer ${{ secrets.INGEST_API_TOKEN }}" \
-            -H "Content-Type: application/json" \
-            -d '{"all":true}')
-          echo "HTTP status: $status"
-          cat response.json
-          if [ "$status" -ge 400 ]; then
-            echo "::error::Ingestion trigger failed with status $status"
-            exit 1
-          fi
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - name: Run every enabled collector
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          BRIGHTDATA_API_KEY: ${{ secrets.BRIGHTDATA_API_KEY }}
+        run: npx tsx scripts/ingest.ts --all
