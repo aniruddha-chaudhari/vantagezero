@@ -1,90 +1,33 @@
 # Vantage
 
-Buildability intelligence for hardware teams: Vantage watches public distributor and
-manufacturer pages for component stock, incoming quantity, lead time, price breaks and
-lifecycle status, and tells a team how many complete units of their planned build are still
-covered. When a supplier page changes shape, the collector heals in place. When supply
-actually changes, the number moves — Vantage knows the difference.
+**Live app: [vantagezero.vercel.app](https://vantagezero.vercel.app)** — no sign-up, no login.
+Built for the Bright Data **Scrape-Verse** hackathon.
 
-## Stack
+A hardware team commits to 500 units. Vantage answers the question that decides whether that
+date holds: **how many can we actually build today, and which part stops us?**
 
-- Next.js + TypeScript, Tailwind CSS, shadcn/ui
-- PostgreSQL (Neon) via Drizzle ORM
-- Zod for structural/domain validation
-- [Bright Data](https://brightdata.com) Scraper Studio (custom PDP collectors, driven via the
-  `bdata` CLI) for all data collection
+It watches public distributor and manufacturer pages for stock, incoming quantity, lead time,
+price breaks and lifecycle status.
 
-## Why not a pre-built scraper?
+When a supplier page changes *shape*, the collector heals in place. When supply *actually*
+changes, the number moves. Vantage knows the difference.
 
-Bright Data ships 800+ pre-built scrapers, but component-distributor product pages (RS
-Online, element14/Farnell, STMicroelectronics) are B2B catalogs, not consumer e-commerce —
-they aren't in the prebuilt library. The fields this project needs are domain-specific and
-wouldn't be covered by a generic product scraper anyway: incoming quantity (vs. in-stock),
-manufacturer standard lead time, price breaks at a specific BOM quantity, and manufacturer
-lifecycle status (marketing status, production status, longevity commitment). Each of the
-three custom collectors in this repo was built with `bdata scraper create` against one exact
-product-detail-page URL, verified live on Bright Data's Web Unlocker before any collector was
-created (see "Day-1 hard gate" below).
+| | |
+|---|---|
+| **Live app** | https://vantagezero.vercel.app |
+| **Collectors** | 5 custom Scraper Studio collectors, 3 regions (UK, India, China) |
+| **Example output** | [jump ↓](#example-structured-output) — one real capture per source |
+| **Self-healing** | [jump ↓](#the-heal-loop-and-the-four-gates-day-5) — four gates, three outcomes |
 
-We also considered TME, a similar distributor, but ruled it out deliberately: TME has an
-official public API, so "why not just use that?" would have an obvious answer — it wouldn't
-demonstrate anything Scraper Studio is for.
+## Architecture
 
-## Terminal / app boundary
+![Vantage architecture](docs/vantage-architecture-with-suppliers.png)
 
-Vantage's own UI never creates, prompts, or heals a Bright Data collector — that happens from
-this terminal (`bdata scraper create` / `heal` / `approve`), the same way a developer would
-manage any piece of infrastructure. The app only ever *triggers a run* of an existing
-collector (`POST /api/ingest/brightdata`) and *reads* the resulting data. This keeps
-"Bright Data collector" and "business data" as two clearly separate concerns.
+Five supplier pages → Bright Data collectors → per-source normalize + Zod validate →
+PostgreSQL → dashboard.
 
-## Data pipeline
-
-```
-bdata scraper create   (this terminal, one-time per source)
-        ↓
-source_targets row     (mpn, source, url, region, collector_id)
-        ↓
-POST /api/ingest/brightdata   or   npm run ingest -- <sourceTargetId>
-        ↓
-runScraper()  →  normalize (per-source field mapping)  →  Zod validation
-        ↓                                                        ↓
-  structural / identity / semantic-sanity pass          any layer fails
-        ↓                                                        ↓
-component_observations / lifecycle_observations row     scraper_incidents row opened
-   (immutable, insert-only)                              (no observation written - never
-                                                            a fabricated zero)
-```
-
-A `.github/workflows/collect.yml` cron calls the same endpoint every 6 hours so history
-accumulates unattended.
-
-## Sources (region: UK + India + China, each chosen by a live Day-1 probe, not preference)
-
-| Role | Source | Collector |
-|---|---|---|
-| Distributor A | RS Online (`uk.rs-online.com`) | `c_msy7solmrxow00enh` |
-| Distributor B | element14 / Farnell (`uk.farnell.com`) | `c_msyu5nup1i1bjgowvk` |
-| Distributor C | DigiKey India (`www.digikey.in`) | `c_mt1cydk063bbxlpux` |
-| Distributor D | LCSC (`www.lcsc.com`) | `c_mt44s8op4nh52dumy` |
-| Manufacturer | STMicroelectronics (`www.st.com`) | `c_msyu5pk9lpeacevev` |
-
-Stock is never summed across regions or across element14/Newark (both Avnet/Farnell) into one
-number — every aggregate is labelled "observed public stock across tracked regional sites."
-
-DigiKey India was added after probing three Indian-distributor candidates live: Mouser India
-was blocked outright (`captcha or protection page found` on the Web Unlocker); Robu.in only
-renders with a full JS browser session and even then exposes stock as a boolean
-"In Stock"/"Out of Stock", never an exact quantity — a hard fail against this project's
-`component_observations.stock` being a required exact count, not an availability flag.
-DigiKey India cleared the bar: exact stock counts, INR price breaks, and manufacturer lead
-time, all via the plain Web Unlocker (no JS rendering needed), and `/en/products/detail/*`
-is not robots-disallowed.
-
-LCSC was added as a fourth distributor to cover a China-based source, verified live before
-being wired in: triggered directly via `/dca/trigger`, polled `/dca/dataset` for the real
-payload, then confirmed again through the actual `bdata scraper run` → normalize → validate
-pipeline (stock=57666, currency=USD) before any code assumed the shape of its output.
+The self-healing gates feed back into **both** the scrapers and the validation step, and
+resolve to one of three outcomes: **approve, reject, or escalate.**
 
 ## Example structured output
 
@@ -100,8 +43,31 @@ live run — not hand-written:
 | STMicroelectronics (manufacturer) | [`brightdata/examples/st-lifecycle-pdp-run.json`](brightdata/examples/st-lifecycle-pdp-run.json) |
 | A heal in progress | [`brightdata/examples/st-lifecycle-heal.json`](brightdata/examples/st-lifecycle-heal.json) |
 
-Two of those inline, so the shape is visible without opening a file. Raw output from the LCSC
-collector (`c_mt44s8op4nh52dumy`) against a live product page:
+### Why four normalizers and not one
+
+The same conceptual field is named and typed differently on every source. This is the whole
+argument for custom collectors plus a per-source normalizer, and it's visible directly in the
+files above — all four rows below describe *in-stock quantity, price tiers, and lead time*:
+
+| | RS Online | element14 | DigiKey India | LCSC |
+|---|---|---|---|---|
+| MPN key | `mpn` | `manufacturer_part_number` | `mpn` | `mpn` |
+| Price-break array | `bulk_price_breaks` | `price_breaks` | `price_breaks` | `price_breaks` |
+| Break quantity | `"1 - 9"` (range) | `"1+"` | `1` (number) | `"1,000 +"` (comma) |
+| Break price key | `unit_price.value` | `unit_price.value` | `unitPrice.value` | `unit_price.value` |
+| Lead time | `lead_time_text` (prose) | `"32 weeks 32 weeks"` | `52` (number) | absent |
+| `currency` | `"£"` (symbol) | `"GBP"` (ISO) | `"INR"` | `"USD"` |
+| Incoming qty | absent | `incoming_quantity` | absent | absent |
+
+Note `unitPrice` vs `unit_price`, `"1 - 9"` vs `1`, and a `currency` that is sometimes a symbol
+and sometimes an ISO code. element14 even returns its lead time doubled
+(`"32 weeks 32 weeks"`). A single generic product scraper cannot reconcile this; each
+normalizer in `brightdata/normalize.ts` is the only place that ambiguity is allowed to live,
+and every one of them is followed by the same Zod schema.
+
+### Raw → normalized, end to end
+
+Raw output from the LCSC collector (`c_mt44s8op4nh52dumy`) against a live product page:
 
 ```json
 [
@@ -146,6 +112,112 @@ validates before a row is ever written:
 }
 ```
 
+### Self-healing output
+
+A real heal, abridged from
+[`brightdata/examples/st-lifecycle-heal.json`](brightdata/examples/st-lifecycle-heal.json).
+The ST collector's `product_status` was returning duplicated, garbled text instead of a clean
+value, so it was healed in place — **note the `collector_id` is unchanged**, which is the point:
+every schedule, trigger and integration referencing that collector keeps working.
+
+```json
+{
+  "collector_id": "c_msyu5pk9lpeacevev",
+  "status": "awaiting_approval",
+  "completed_steps": ["planner", "control_preview_runner", "code_fixer",
+                      "step_preview_runner", "request_fulfillment_validator", "step_advance"],
+  "prompt": "The product_status field returns duplicated repeated text instead of one clean value. Extract Marketing Status (e.g. Active, NRND, Obsolete) and Production Status as two separate short single-value string fields, no repetition. Also extract longevity_commitment_years and longevity_start_date if shown; else null.",
+  "next_step": "bdata scraper approve c_msyu5pk9lpeacevev --url https://www.st.com/...",
+  "preview_result": [
+    {
+      "product_name": "STM32F407VG",
+      "marketing_status": "Active",
+      "production_status": "Product is in volume production.",
+      "longevity_commitment_years": 10,
+      "longevity_start_date": "01/2026"
+    }
+  ]
+}
+```
+
+One garbled field became four clean typed ones. Critically, the heal stops at
+`awaiting_approval` rather than shipping — that preview is exactly what the four gates in
+`domain/gates.ts` evaluate before anything is trusted (see
+"[The heal loop and the four gates](#the-heal-loop-and-the-four-gates-day-5)" below). A healed
+preview always *looks* plausible; looking plausible is not evidence of being right.
+
+## Sources
+
+Five collectors, three regions. Every source was probed live before it was used — none were
+picked by preference.
+
+| Role | Source | Region | Collector |
+|---|---|---|---|
+| Distributor | RS Online (`uk.rs-online.com`) | UK | `c_msy7solmrxow00enh` |
+| Distributor | element14 / Farnell (`uk.farnell.com`) | UK | `c_msyu5nup1i1bjgowvk` |
+| Distributor | DigiKey India (`www.digikey.in`) | India | `c_mt1cydk063bbxlpux` |
+| Distributor | LCSC (`www.lcsc.com`) | China | `c_mt44s8op4nh52dumy` |
+| Manufacturer | STMicroelectronics (`www.st.com`) | — | `c_msyu5pk9lpeacevev` |
+
+**Rejected, with evidence:**
+
+- **Mouser India** — blocked outright (`captcha or protection page found` on the Web Unlocker).
+- **Robu.in** — needs a full JS browser session, and even then exposes stock as a boolean
+  "In Stock"/"Out of Stock". Never an exact count. Hard fail: `stock` is a required integer here,
+  not an availability flag.
+- **TME** — has an official public API, so "why not just use that?" would have an obvious
+  answer. It wouldn't demonstrate anything Scraper Studio is for.
+
+Stock is never summed across regions. A part in a UK warehouse isn't allocatable to an Indian
+build, so every aggregate is labelled "observed public stock across tracked regional sites."
+
+## Why not a pre-built scraper?
+
+Bright Data ships 800+ prebuilt scrapers. None cover B2B component distributors — those are
+trade catalogs, not consumer e-commerce.
+
+More importantly, none extract the fields this project needs: **incoming quantity** (distinct
+from in-stock), **manufacturer standard lead time**, **price breaks at a specific BOM
+quantity**, and **lifecycle status** (marketing status, production status, longevity
+commitment).
+
+Each of the five collectors was built with `bdata scraper create` against one exact
+product-detail-page URL, verified live on the Web Unlocker first.
+
+## Terminal / app boundary
+
+The app never creates, prompts, or heals a collector. That happens from the terminal
+(`bdata scraper create` / `heal` / `approve`), like any other piece of infrastructure.
+
+The app only *triggers a run* of an existing collector and *reads* the result. This keeps
+"Bright Data collector" and "business data" as two separate concerns.
+
+## Data pipeline
+
+```
+bdata scraper create   (terminal, one-time per source)
+        ↓
+source_targets row     (mpn, source, url, region, collector_id)
+        ↓
+scripts/ingest.ts --all   or   POST /api/ingest/webhook
+        ↓
+runScraper()  →  normalize (per-source)  →  Zod validation
+        ↓                                         ↓
+   all layers pass                          any layer fails
+        ↓                                         ↓
+  observation row                       scraper_incidents row
+  (immutable, insert-only)              (no observation written —
+                                         never a fabricated zero)
+```
+
+Two ways in, one validation path:
+
+- **`.github/workflows/collect.yml`** — cron, every 6 hours, runs the CLI in the Actions runner.
+- **`POST /api/ingest/webhook`** — a collector can POST straight to the app, no CLI needed.
+
+Both funnel through the same function, so there's one implementation of "is this payload
+trustworthy," not two.
+
 ## Getting started
 
 ```bash
@@ -165,20 +237,23 @@ Required environment variables (`.env.local`, never committed):
 | `SLACK_WEBHOOK_URL` | Optional. A Slack Incoming Webhook URL. Posts scraper incidents, heal escalations and critical buildability alerts - unset entirely no-ops all Slack output |
 | `SLACK_ACTIVITY_FEED` | Optional. Set to `1` alongside `SLACK_WEBHOOK_URL` to also post one line per *successful* scrape - a live activity feed for a demo or a single-target run. Left unset on the cron and on bulk backfills (the catalog resolver): an `--all` cycle posts one per enabled source target, and Slack rate-limits that burst hard enough to drop the incident alerts underneath it |
 
-## Current status (Day 2)
+## Current status
 
-Real numbers from the live database, not placeholders:
+Real numbers from the live database, not placeholders — regenerate any time with
+`npx tsx --env-file=.env.local scripts/stats.ts`:
 
-- 3 custom Scraper Studio collectors (RS Online, element14, STMicroelectronics), all PDP scrapers
-- 1 region (UK), chosen by a live Day-1 probe across RS/element14/Newark
-- 17 MPNs seeded into the catalog, 9 with at least one live, validated observation across
-  MCU, regulator, PHY, memory, transceiver, and connector categories
-- 17 distributor observations, 2 manufacturer lifecycle observations stored
-- 26 scraper incidents opened automatically during catalog scaling - wrong-variant MPNs
-  (e.g. a search matching `LM2596S-ADJ/NOPB` when `LM2596S-ADJ` was requested), a genuinely
-  wrong search result, and one real bug in this repo's own RS normalizer (fixed; see
-  `brightdata/normalize.ts`) - never a fabricated zero
-- 45 collector runs executed
+- **5 custom Scraper Studio collectors**, all PDP scrapers: RS Online (24 tracked targets),
+  element14 (26), DigiKey India (24), LCSC (1), STMicroelectronics (2, manufacturer lifecycle)
+- **3 regions** — UK, India, China — each chosen by a live probe, not preference
+- **34 distinct MPNs** across 77 source targets, spanning MCU, regulator, PMIC, PHY, memory,
+  transceiver, connector, crystal, sensor, op-amp, MOSFET, ADC/DAC and protection categories
+- **40 distributor observations, 2 manufacturer lifecycle observations** stored (insert-only)
+- **93 collector runs** executed
+- **51 scraper incidents** opened automatically rather than writing bad data — wrong-variant
+  MPNs (a search matching `LM2596S-ADJ/NOPB` when `LM2596S-ADJ` was requested;
+  `DS18B20-EV` for `DS18B20`), missing required fields on pages that don't render them, and
+  one real bug in this repo's own RS normalizer (fixed; see `brightdata/normalize.ts`).
+  Never a fabricated zero.
 - 1 heal performed on the STMicroelectronics collector (see `brightdata/examples/st-lifecycle-heal.json`):
   the preview came back clean, but the approved production run did not pick up the fix. Root
   cause, found later: the approve call was missing `--auto-save`, so the healed template was
@@ -187,34 +262,37 @@ Real numbers from the live database, not placeholders:
   removing the gate" below). The ST normalizer still works around the original garbled field
   defensively, since the observations already on record were collected pre-fix
 
-The remaining unresolved catalog MPNs (PMIC, sensor, protection categories, a couple of
-MCU/transceiver variants) failed for legitimate reasons already listed above and are left
-unresolved rather than forced - re-running `scripts/resolve-catalog.ts` after adding more
-candidate URLs will grow the catalog toward the 20-30 target without touching what's already
-verified.
+Unresolved catalog MPNs are left unresolved rather than forced. They fail for legitimate,
+logged reasons — no matching organic search result, a page that doesn't render an exact stock
+count, or a variant-suffix mismatch the identity check correctly rejected. Re-running
+`scripts/resolve-catalog.ts` grows the catalog without touching what's already verified.
 
 ## Live MPN resolution: the catalog "floor" and the search "ceiling"
 
-The seeded catalog (17 MPNs) is the floor - it resolves instantly because it's pre-verified.
-For anything else, a build's untracked rows ("— not tracked") get a **Search for this part**
-action. We planned this as a fourth custom Scraper Studio collector (a "Search" type -
-keyword in, listings out), but probing both distributors' actual multi-result search pages
-found they're robots-disallowed: RS Online's search path (`/*searchTerm=`) is blocked outright,
-and element14's listings page redirects to a path (`/search?st=`) that's also blocked - only
-an exact single match silently redirects to an allowed product page. Rather than build a
-collector against a disallowed path, live resolution uses Bright Data's Web Search API
-instead (`db/catalog.ts`) - the same mechanism already proven at Day 2's catalog-seeding time,
-now used live. A judge's pick still goes through the identical identity/shape validation as
-every other observation: a wrong candidate (a `/NOPB` or `-T26A` suffix variant, for instance)
-is rejected with a clear reason, never silently accepted.
+The seeded catalog (34 MPNs) is the floor — it resolves instantly because it's pre-verified.
+
+For anything else, untracked rows get a **Search for this part** action.
+
+We planned this as a "Search" type collector (keyword in, listings out), but both
+distributors' multi-result search pages are **robots-disallowed**: RS Online's
+`/*searchTerm=` is blocked outright, and element14's `/search?st=` is too. Only an exact
+single match redirects to an allowed product page.
+
+Rather than build against a disallowed path, live resolution uses Bright Data's Web Search
+API (`db/catalog.ts`).
+
+Either way, the pick goes through identical identity/shape validation. A wrong candidate — a
+`/NOPB` or `-T26A` suffix variant — is rejected with a reason, never silently accepted.
 
 ## The heal loop and the four gates (Day 5)
 
-A heal regenerates a collector's extraction logic from a natural-language description of
-what broke. The preview always *looks* plausible - the risk is a healed selector that grabbed
-the wrong field on the page (stock instead of pin count, stock instead of incoming) while
-still returning a perfectly valid-looking number. `domain/gates.ts` runs four checks against
-every healed preview before it's trusted:
+A heal regenerates a collector's extraction logic from a description of what broke.
+
+**The preview always *looks* plausible.** That's the trap. A healed selector can grab pin
+count instead of stock and still return a perfectly valid number that parses cleanly — and
+then go on to size a purchase order.
+
+So `domain/gates.ts` runs four checks before any heal is trusted:
 
 | Gate | Catches |
 |---|---|
@@ -223,23 +301,27 @@ every healed preview before it's trusted:
 | Continuity | An implausible jump from the last valid value (e.g. stock replaced by pin count) |
 | Collision | The healed value exactly equals a different field on the same page (stock === incoming) |
 
-Identity/shape failures auto-reject (unambiguously wrong); continuity/collision failures
-escalate to a human, since a plausible-but-wrong value can't be told apart from a real
-extreme change by magnitude alone (`domain/gates.test.ts` covers all four scenarios against
-the plan's own examples - run with `npm run test:gates`). `brightdata/heal.ts` runs a healed
-preview through the same normalize-and-validate pipeline production ingestion uses, then
-these gates, so there's one implementation of "is this heal trustworthy," not two.
+**Identity and shape failures auto-reject** — they're unambiguously wrong.
+
+**Continuity and collision failures escalate to a human** — a plausible-but-wrong value can't
+be told apart from a real extreme change by magnitude alone.
+
+`brightdata/heal.ts` runs the healed preview through the same normalize-and-validate pipeline
+production ingestion uses, then these gates. One implementation of "is this heal trustworthy,"
+not two.
+
+Tests: `npm run test:gates` (`domain/gates.test.ts` covers all four gates).
 
 ### Zero-touch without removing the gate
 
-Bright Data offers two ways to run a heal. `bdata scraper heal` pauses at
-`status: pending_answer` / `step: user_approval` for a person to eyeball the diff — safe, but
-it doesn't run unattended. `bdata scraper heal --auto-approve` skips the approval gate
-entirely — unattended, but it accepts any diff that parses, so a healed selector reading pin
-count instead of stock lands straight in production as a number that will size a purchase
-order.
+Bright Data offers two ways to run a heal:
 
-Vantage takes the third option: keep the gate, replace the reviewer. The four gates hold the
+- **`bdata scraper heal`** — pauses at `user_approval` for a person to eyeball the diff. Safe,
+  but doesn't run unattended.
+- **`heal --auto-approve`** — skips the gate entirely. Unattended, but ships any diff that
+  parses.
+
+Vantage takes a third option: **keep the gate, replace the reviewer.** The four gates hold the
 approval authority, so the loop is unattended *and* verified.
 
 | | Unattended | Verified |
@@ -256,12 +338,14 @@ The three gate decisions map onto three genuinely distinct end states, not three
 | `auto_reject` | `approve --reject`, reheal with a sharper prompt | Unchanged; job ended |
 | `escalate` | Left in `pending_answer`, Slack alert sent | Awaiting a human on `/dashboard/sources` |
 
-`--auto-save` is the flag that makes the approve path durable: it's forwarded as `auto_save`
-to Bright Data's resume-self-healing-job call, and without it an approval lets the paused job
-resume but never writes the healed template back to the collector. The fix works for that one
-run, the collector reverts, and the next cron cycle re-breaks on the same selector and heals
-the identical break again. That failure is exactly what bit the ST collector before the flag was
-wired in — it's the one heal in the counts above whose clean preview never reached production.
+**`--auto-save` is what makes the approve path durable.** Without it, an approval resumes the
+paused job but never writes the healed template back to the collector.
+
+The fix works once, the collector reverts, and the next cron cycle re-breaks on the same
+selector — healing the identical break forever.
+
+That's exactly what bit the ST collector: the one heal in the counts above whose clean preview
+never reached production. Root cause was a missing flag, not a platform quirk.
 
 The read/write API surface for this (`GET /api/incidents/open`, `GET
 /api/observations/latest-valid`, `POST /api/incidents/[id]/resolve`) is bearer-token
@@ -281,33 +365,41 @@ is the workflow Scraper Studio is designed for.
 What the assistant did: scaffolding, React/Tailwind components, boilerplate, test cases, and
 drafting prose in this README.
 
-What I decided and can explain: which sources to use and why (each chosen by a live Day-1
-probe on the Web Unlocker, with the rejections documented above — Mouser India blocked,
-Robu.in boolean-only, TME ruled out for having a public API); the four heal gates and their
-decision rule, including why identity/shape auto-reject while continuity/collision escalate;
-the per-source normalizer field mappings; the database schema and its insert-only observation
-model; and the rule that a failed validation opens an incident rather than writing a zero.
+What I decided and can explain:
 
-Separately, and distinct from the above: the app uses an LLM at **runtime** (Groq) for two
-product features — the guided "Help me choose parts" flow and the alternative-part
-suggestions. Both are treated as untrusted input: every part the model names is
-re-verified against the real tracked catalog before it is ever labelled "tracked"
-(`domain/design.ts`, `domain/alternatives.ts`). No scraped value is ever produced by an LLM.
+- Which sources to use and why — each probed live, with the rejections documented above
+- The four heal gates and their decision rule, including why identity/shape auto-reject while
+  continuity/collision escalate
+- The per-source normalizer field mappings
+- The schema and its insert-only observation model
+- The rule that a failed validation opens an incident rather than writing a zero
+
+**Separately — an LLM at runtime.** The app uses Groq for two product features: the guided
+"Help me choose parts" flow and alternative-part suggestions.
+
+Both treat the model as untrusted. Every part it names is re-verified against the real tracked
+catalog before being labelled "tracked" (`domain/design.ts`, `domain/alternatives.ts`).
+
+**No scraped value is ever produced by an LLM.**
 
 ## Limitations
 
-Vantage does not guarantee: inventory is still available when a PO is placed; distributor
-stock is globally allocatable; lead-time text equals a delivery date; two distributors
-represent the whole market; production ships on component availability alone. Buildable-unit
-math is a simple floor division and does not account for minimum order quantity or order
-multiple, though both are captured. Component images are displayed from the source page and
-not rehosted.
+Vantage does **not** guarantee that:
 
-**Known limitation:** the DigiKey India collector (`c_mt1cydk063bbxlpux`) does not reliably
-extract price breaks on every part page - it returned a full price-break table for
-LM2596S-ADJ/NOPB but an empty one for STM32F407VGT6, even though that page does have a price
-table (verified manually). Stock, currency, and lead time are unaffected and extract
-correctly on both. The component detail page handles this gracefully (an empty price-break
-array renders as "—" / "No price break data observed yet", never a wrong number), so this is
-a coverage gap, not a correctness bug. Left unresolved for now - a heal pass on this
-collector would be the fix.
+- Inventory is still available when a PO is placed
+- Distributor stock is globally allocatable
+- Lead-time text equals a delivery date
+- These distributors represent the whole market
+- Production ships on component availability alone
+
+Buildable-unit math is floor division and doesn't account for minimum order quantity or order
+multiple — though both are captured. Component images are hotlinked from the source, not
+rehosted.
+
+**Known gap:** the DigiKey India collector doesn't reliably extract price breaks on every page
+— a full table for `LM2596S-ADJ/NOPB`, an empty one for `STM32F407VGT6` (whose page does have
+a price table).
+
+Stock, currency and lead time are unaffected. The UI renders an empty price-break array as
+"—", never a wrong number, so this is a coverage gap rather than a correctness bug. A heal pass
+would be the fix.
