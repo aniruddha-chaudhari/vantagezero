@@ -41,7 +41,18 @@ type LandDot = {
   x: number;
   y: number;
   radius: number;
+  /** Seconds - staggers each dot's glow cycle so hundreds of dots don't pulse in lockstep. */
+  glowDelay: number;
+  glowDuration: number;
 };
+
+/** Cheap deterministic hash, not Math.random() - this module runs once at build time for a
+ * statically-generated page, so a "random" spread only needs to look irregular, not be
+ * re-randomized per request; a stable hash keeps the output reproducible across builds. */
+function pseudoRandom01(seed: number): number {
+  const x = Math.sin(seed * 12.9898) * 43758.5453;
+  return x - Math.floor(x);
+}
 
 function createLandDots(): LandDot[] {
   const dots: LandDot[] = [];
@@ -89,10 +100,16 @@ function createLandDots(): LandDot[] {
         radius = DOT_RADIUS * (1 - 0.42 * Math.min(edgeProgress, 1));
       }
 
+      const seed = dots.length;
+
       dots.push({
         x: Number(projected[0].toFixed(2)),
         y: Number(projected[1].toFixed(2)),
         radius: Number(radius.toFixed(3)),
+        // Spread delays across a wider window than the duration range so the population
+        // never re-syncs into visible waves - a common tell of a too-small delay spread.
+        glowDelay: Number((pseudoRandom01(seed) * 6).toFixed(2)),
+        glowDuration: Number((3 + pseudoRandom01(seed * 7.31 + 1) * 3).toFixed(2)),
       });
     }
   }
@@ -167,14 +184,22 @@ export function HeroGlobe() {
             strokeWidth="0.54"
           />
 
-          {/* Actual geographic dots. No SVG pattern or land-shape masking. */}
+          {/* Actual geographic dots. No SVG pattern or land-shape masking. Each gets its own
+              randomized glow delay/duration - fillOpacity here is the reduced-motion and
+              pre-animation fallback, matching the animation's own 0%/100% keyframe value so
+              there's no visible jump either way. */}
           <g fill="currentColor" fillOpacity="0.245">
             {landDots.map((dot, index) => (
               <circle
                 key={`land-${index}`}
+                className="hero-globe-dot"
                 cx={dot.x}
                 cy={dot.y}
                 r={dot.radius}
+                style={{
+                  animationDelay: `${dot.glowDelay}s`,
+                  animationDuration: `${dot.glowDuration}s`,
+                }}
               />
             ))}
           </g>
@@ -202,6 +227,20 @@ export function HeroGlobe() {
           ))}
         </g>
       </svg>
+
+      <style>{`
+        @keyframes hero-globe-dot-glow {
+          0%, 100% { fill-opacity: 0.245; }
+          50% { fill-opacity: 0.55; }
+        }
+        @media (prefers-reduced-motion: no-preference) {
+          .hero-globe-dot {
+            animation-name: hero-globe-dot-glow;
+            animation-timing-function: ease-in-out;
+            animation-iteration-count: infinite;
+          }
+        }
+      `}</style>
     </div>
   );
 }
