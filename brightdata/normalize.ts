@@ -79,19 +79,23 @@ function normalizeRsOnline(raw: unknown, target: NormalizationTarget): Distribut
   const rawPriceBreaks = Array.isArray(row.bulk_price_breaks)
     ? (row.bulk_price_breaks as Array<Record<string, unknown>>)
     : [];
-  const firstBreakPrice = rawPriceBreaks[0]?.unit_price as { currency?: string } | undefined;
-  const currency = unitPriceQty1?.currency ?? firstBreakPrice?.currency;
-
-  const priceBreaks = rawPriceBreaks.map((pb) => {
+  // A malformed tier (no price, or an unparseable quantity range - e.g. a "call for price"
+  // row) is dropped rather than discarding the whole observation over it: stock is the field
+  // this project actually depends on, and one bad price tier says nothing about whether stock
+  // is trustworthy. Never invents a price for the dropped tier; just omits it.
+  const priceBreaks = rawPriceBreaks.flatMap((pb) => {
     const priceObj = pb.unit_price as { value?: number } | undefined;
-    if (priceObj?.value == null) {
-      throw new MissingRequiredField("Price break is missing unit_price.value");
+    if (priceObj?.value == null) return [];
+    try {
+      return [{ minQty: parseMinQtyFromRange(String(pb.quantity ?? "")), unitPrice: Number(priceObj.value) }];
+    } catch {
+      return [];
     }
-    return {
-      minQty: parseMinQtyFromRange(String(pb.quantity ?? "")),
-      unitPrice: Number(priceObj.value),
-    };
   });
+
+  const firstValidBreakPrice = rawPriceBreaks.find((pb) => (pb.unit_price as { value?: number })?.value != null)
+    ?.unit_price as { currency?: string } | undefined;
+  const currency = unitPriceQty1?.currency ?? firstValidBreakPrice?.currency;
 
   if (row.mpn == null || row.in_stock_quantity == null || currency == null) {
     throw new MissingRequiredField("RS Online output is missing a required field (mpn, in_stock_quantity, or currency)");
@@ -133,16 +137,17 @@ function normalizeRsOnline(raw: unknown, target: NormalizationTarget): Distribut
 function normalizeElement14(raw: unknown, target: NormalizationTarget): DistributorObservationInput {
   const row = firstRow(raw);
 
+  // A malformed tier is dropped, not fatal to the whole observation - see the matching
+  // comment in normalizeRsOnline for why.
   const priceBreaks = Array.isArray(row.price_breaks)
-    ? (row.price_breaks as Array<Record<string, unknown>>).map((pb) => {
+    ? (row.price_breaks as Array<Record<string, unknown>>).flatMap((pb) => {
         const priceObj = pb.unit_price as { value?: number } | undefined;
-        if (priceObj?.value == null) {
-          throw new MissingRequiredField("Price break is missing unit_price.value");
+        if (priceObj?.value == null) return [];
+        try {
+          return [{ minQty: parseMinQtyFromRange(String(pb.quantity ?? "")), unitPrice: Number(priceObj.value) }];
+        } catch {
+          return [];
         }
-        return {
-          minQty: parseMinQtyFromRange(String(pb.quantity ?? "")),
-          unitPrice: Number(priceObj.value),
-        };
       })
     : [];
 
@@ -193,16 +198,13 @@ function normalizeElement14(raw: unknown, target: NormalizationTarget): Distribu
 function normalizeDigikey(raw: unknown, target: NormalizationTarget): DistributorObservationInput {
   const row = firstRow(raw);
 
+  // A malformed tier is dropped, not fatal to the whole observation - see the matching
+  // comment in normalizeRsOnline for why.
   const priceBreaks = Array.isArray(row.price_breaks)
-    ? (row.price_breaks as Array<Record<string, unknown>>).map((pb) => {
+    ? (row.price_breaks as Array<Record<string, unknown>>).flatMap((pb) => {
         const priceObj = pb.unitPrice as { value?: number } | undefined;
-        if (priceObj?.value == null) {
-          throw new MissingRequiredField("Price break is missing unitPrice.value");
-        }
-        if (typeof pb.minQty !== "number") {
-          throw new MissingRequiredField("Price break is missing a numeric minQty");
-        }
-        return { minQty: pb.minQty, unitPrice: Number(priceObj.value) };
+        if (priceObj?.value == null || typeof pb.minQty !== "number") return [];
+        return [{ minQty: pb.minQty, unitPrice: Number(priceObj.value) }];
       })
     : [];
 
@@ -252,13 +254,17 @@ function normalizeLcsc(raw: unknown, target: NormalizationTarget): DistributorOb
     throw new MissingRequiredField("LCSC output is missing a required field (mpn, in_stock_quantity, or currency)");
   }
 
+  // A malformed tier is dropped, not fatal to the whole observation - see the matching
+  // comment in normalizeRsOnline for why.
   const priceBreaks = Array.isArray(row.price_breaks)
-    ? (row.price_breaks as Array<Record<string, unknown>>).map((pb) => {
+    ? (row.price_breaks as Array<Record<string, unknown>>).flatMap((pb) => {
         const priceObj = pb.unit_price as { value?: number } | undefined;
-        if (priceObj?.value == null) {
-          throw new MissingRequiredField("Price break is missing unit_price.value");
+        if (priceObj?.value == null) return [];
+        try {
+          return [{ minQty: parseMinQtyFromRange(String(pb.min_qty ?? "")), unitPrice: Number(priceObj.value) }];
+        } catch {
+          return [];
         }
-        return { minQty: parseMinQtyFromRange(String(pb.min_qty ?? "")), unitPrice: Number(priceObj.value) };
       })
     : [];
 
