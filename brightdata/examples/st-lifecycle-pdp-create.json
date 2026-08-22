@@ -1,1 +1,16 @@
-{"collector_id":"c_msyu5pk9lpeacevev","name":"st-lifecycle-pdp","status":"done","completed_steps":["planner","collector_mainatiner","output_schema_generator","code_generator","input_schema_generator","preview_runner","preview_picker"],"view_url":"https://brightdata.com/cp/scrapers/c_msyu5pk9lpeacevev","created_at":"2026-08-18T15:47:00.393Z"}
+{
+  "collector_id": "c_msyu5pk9lpeacevev",
+  "name": "st-lifecycle-pdp",
+  "status": "done",
+  "completed_steps": [
+    "planner",
+    "collector_mainatiner",
+    "output_schema_generator",
+    "code_generator",
+    "input_schema_generator",
+    "preview_runner",
+    "preview_picker"
+  ],
+  "view_url": "https://brightdata.com/cp/scrapers/c_msyu5pk9lpeacevev",
+  "created_at": "2026-08-18T15:47:00.393Z"
+}

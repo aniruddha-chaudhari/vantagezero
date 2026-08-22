@@ -1,1 +1,66 @@
-[{"mpn":"STM32F103C8T6","manufacturer":"ST","lcsc_part_number":"C8734","in_stock_quantity":57666,"package":"LQFP-48(7x7)","minimum_order_quantity":1,"order_multiple":1,"currency":"USD","price_breaks":[{"min_qty":"1 +","unit_price":{"value":1.7292,"currency":"USD","symbol":"$"}},{"min_qty":"10 +","unit_price":{"value":1.4973,"currency":"USD","symbol":"$"}},{"min_qty":"30 +","unit_price":{"value":1.3324,"currency":"USD","symbol":"$"}},{"min_qty":"250 +","unit_price":{"value":1.1838,"currency":"USD","symbol":"$"}},{"min_qty":"500 +","unit_price":{"value":1.1153,"currency":"USD","symbol":"$"}},{"min_qty":"1,000 +","unit_price":{"value":1.0859,"currency":"USD","symbol":"$"}}],"product_image_url":"https://assets.lcsc.com/images/lcsc/900x900/20230221_STMicroelectronics-STM32F103C8T6_C8734_front.jpg","input":{"url":"https://www.lcsc.com/product-detail/C8734.html"}}]
+[
+  {
+    "mpn": "STM32F103C8T6",
+    "manufacturer": "ST",
+    "lcsc_part_number": "C8734",
+    "in_stock_quantity": 57666,
+    "package": "LQFP-48(7x7)",
+    "minimum_order_quantity": 1,
+    "order_multiple": 1,
+    "currency": "USD",
+    "price_breaks": [
+      {
+        "min_qty": "1 +",
+        "unit_price": {
+          "value": 1.7292,
+          "currency": "USD",
+          "symbol": "$"
+        }
+      },
+      {
+        "min_qty": "10 +",
+        "unit_price": {
+          "value": 1.4973,
+          "currency": "USD",
+          "symbol": "$"
+        }
+      },
+      {
+        "min_qty": "30 +",
+        "unit_price": {
+          "value": 1.3324,
+          "currency": "USD",
+          "symbol": "$"
+        }
+      },
+      {
+        "min_qty": "250 +",
+        "unit_price": {
+          "value": 1.1838,
+          "currency": "USD",
+          "symbol": "$"
+        }
+      },
+      {
+        "min_qty": "500 +",
+        "unit_price": {
+          "value": 1.1153,
+          "currency": "USD",
+          "symbol": "$"
+        }
+      },
+      {
+        "min_qty": "1,000 +",
+        "unit_price": {
+          "value": 1.0859,
+          "currency": "USD",
+          "symbol": "$"
+        }
+      }
+    ],
+    "product_image_url": "https://assets.lcsc.com/images/lcsc/900x900/20230221_STMicroelectronics-STM32F103C8T6_C8734_front.jpg",
+    "input": {
+      "url": "https://www.lcsc.com/product-detail/C8734.html"
+    }
+  }
+]

@@ -1,1 +1,17 @@
-{"collector_id":"c_msyu5nup1i1bjgowvk","name":"e14-uk-pdp","status":"done","completed_steps":["prepare_intent_analyzer","planner","collector_mainatiner","output_schema_generator","code_generator","input_schema_generator","preview_runner","preview_picker"],"view_url":"https://brightdata.com/cp/scrapers/c_msyu5nup1i1bjgowvk","created_at":"2026-08-18T15:46:58.176Z"}
+{
+  "collector_id": "c_msyu5nup1i1bjgowvk",
+  "name": "e14-uk-pdp",
+  "status": "done",
+  "completed_steps": [
+    "prepare_intent_analyzer",
+    "planner",
+    "collector_mainatiner",
+    "output_schema_generator",
+    "code_generator",
+    "input_schema_generator",
+    "preview_runner",
+    "preview_picker"
+  ],
+  "view_url": "https://brightdata.com/cp/scrapers/c_msyu5nup1i1bjgowvk",
+  "created_at": "2026-08-18T15:46:58.176Z"
+}

@@ -1,1 +1,62 @@
-[{"mpn":"STM32F407VGT6","manufacturer":"STMicroelectronics","rs_stock_number":"746-8226","in_stock_quantity":586,"lead_time_text":"Need more?\n Click ‘Check delivery dates’ to find extra stock and lead times.","currency":"£","unit_price_qty_1":{"value":8.49,"currency":"GBP","symbol":"£"},"bulk_price_breaks":[{"quantity":"1 - 9","unit_price":{"value":8.49,"currency":"GBP","symbol":"£"}},{"quantity":"10 - 24","unit_price":{"value":8.38,"currency":"GBP","symbol":"£"}},{"quantity":"25 - 99","unit_price":{"value":8.28,"currency":"GBP","symbol":"£"}},{"quantity":"100 - 249","unit_price":{"value":8.18,"currency":"GBP","symbol":"£"}},{"quantity":"250 +","unit_price":{"value":8.08,"currency":"GBP","symbol":"£"}}],"package":"LQFP","product_image_url":"https://media.rs-online.com/f_auto,q_auto,bo_1.5px_solid_white,b_auto,c_pad,dpr_2,h_399,w_710/c_pad,h_399,w_710/F7468226-01?pgw=1","input":{"url":"https://uk.rs-online.com/web/p/microcontrollers/7468226"}}]
+[
+  {
+    "mpn": "STM32F407VGT6",
+    "manufacturer": "STMicroelectronics",
+    "rs_stock_number": "746-8226",
+    "in_stock_quantity": 586,
+    "lead_time_text": "Need more?\n Click ‘Check delivery dates’ to find extra stock and lead times.",
+    "currency": "£",
+    "unit_price_qty_1": {
+      "value": 8.49,
+      "currency": "GBP",
+      "symbol": "£"
+    },
+    "bulk_price_breaks": [
+      {
+        "quantity": "1 - 9",
+        "unit_price": {
+          "value": 8.49,
+          "currency": "GBP",
+          "symbol": "£"
+        }
+      },
+      {
+        "quantity": "10 - 24",
+        "unit_price": {
+          "value": 8.38,
+          "currency": "GBP",
+          "symbol": "£"
+        }
+      },
+      {
+        "quantity": "25 - 99",
+        "unit_price": {
+          "value": 8.28,
+          "currency": "GBP",
+          "symbol": "£"
+        }
+      },
+      {
+        "quantity": "100 - 249",
+        "unit_price": {
+          "value": 8.18,
+          "currency": "GBP",
+          "symbol": "£"
+        }
+      },
+      {
+        "quantity": "250 +",
+        "unit_price": {
+          "value": 8.08,
+          "currency": "GBP",
+          "symbol": "£"
+        }
+      }
+    ],
+    "package": "LQFP",
+    "product_image_url": "https://media.rs-online.com/f_auto,q_auto,bo_1.5px_solid_white,b_auto,c_pad,dpr_2,h_399,w_710/c_pad,h_399,w_710/F7468226-01?pgw=1",
+    "input": {
+      "url": "https://uk.rs-online.com/web/p/microcontrollers/7468226"
+    }
+  }
+]

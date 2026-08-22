@@ -1,1 +1,13 @@
-[{"mpn":"STM32F407VGT6","in_stock_quantity":8203,"currency":"INR","price_breaks":[],"manufacturer_lead_time_weeks":52,"product_image_url":"https://mm.digikey.com/Volume0/opasdata/d220001/derivates/1/003/208/897/497~1L_ME~T~100_sml(200x200).jpg","input":{"url":"https://www.digikey.in/en/products/detail/stmicroelectronics/STM32F407VGT6/2747117"}}]
+[
+  {
+    "mpn": "STM32F407VGT6",
+    "in_stock_quantity": 8203,
+    "currency": "INR",
+    "price_breaks": [],
+    "manufacturer_lead_time_weeks": 52,
+    "product_image_url": "https://mm.digikey.com/Volume0/opasdata/d220001/derivates/1/003/208/897/497~1L_ME~T~100_sml(200x200).jpg",
+    "input": {
+      "url": "https://www.digikey.in/en/products/detail/stmicroelectronics/STM32F407VGT6/2747117"
+    }
+  }
+]
