@@ -11,12 +11,15 @@
  *                                                                rate discipline (manual/demo run,
  *                                                                per the plan's "the demo loop
  *                                                                reproduces a failure by hand")
+ *   tsx scripts/heal-loop.ts --max-incidents 1                  cap a system-wide automatic run
+ *   tsx scripts/heal-loop.ts --force --mpns USB4105-GF-A        heal only incidents for these MPNs
  *
  * Required env: INGEST_API_TOKEN, BRIGHTDATA_API_KEY. Optional: APP_BASE_URL (defaults to
  * localhost:3000), SLACK_WEBHOOK_URL (escalation alerts no-op without it).
  */
 import { approveHeal, healScraper } from "@/brightdata/client";
 import { evaluateHealPreview, type HealTarget } from "@/brightdata/heal";
+import { selectHealCandidates } from "@/domain/heal-queue";
 import { sendSlackAlert } from "@/lib/slack";
 
 const APP_BASE_URL = (process.env.APP_BASE_URL ?? "http://localhost:3000").replace(/\/$/, "");
@@ -31,6 +34,7 @@ interface OpenIncident {
   sourceTargetId: string;
   collectorId: string | null;
   incidentType: string;
+  openedAt: string;
   notes: string | null;
   sourceTarget: HealTarget;
   eligibleForAutoHeal: boolean;
@@ -41,8 +45,9 @@ function authHeaders(): Record<string, string> {
   return { Authorization: `Bearer ${INGEST_API_TOKEN}`, "Content-Type": "application/json" };
 }
 
-async function fetchOpenIncidents(): Promise<OpenIncident[]> {
-  const res = await fetch(`${APP_BASE_URL}/api/incidents/open`, { headers: authHeaders() });
+async function fetchOpenIncidents(mpns?: string[]): Promise<OpenIncident[]> {
+  const query = mpns?.length ? `?${new URLSearchParams({ mpns: mpns.join(",") })}` : "";
+  const res = await fetch(`${APP_BASE_URL}/api/incidents/open${query}`, { headers: authHeaders() });
   if (!res.ok) throw new Error(`GET /api/incidents/open failed: ${res.status} ${await res.text()}`);
   const body = await res.json();
   return body.incidents;
@@ -91,10 +96,13 @@ interface HealAttemptResult {
 async function attemptHeal(incident: OpenIncident, sharpen: boolean): Promise<HealAttemptResult> {
   const prompt = buildHealPrompt(incident, sharpen);
   console.log(`  heal prompt: ${prompt}`);
+  const startedAt = Date.now();
+  console.log(`  Bright Data heal started; this normally takes several minutes...`);
 
   const healResult = (await healScraper(incident.collectorId!, incident.sourceTarget.sourceUrl, prompt)) as {
     preview_result?: unknown;
   };
+  console.log(`  Bright Data heal returned after ${Math.round((Date.now() - startedAt) / 1000)}s.`);
   if (healResult.preview_result == null) {
     throw new Error("bdata scraper heal did not return a preview_result");
   }
@@ -184,15 +192,28 @@ async function main() {
   const force = args.includes("--force");
   const idFlagIndex = args.indexOf("--source-target-id");
   const onlySourceTargetId = idFlagIndex >= 0 ? args[idFlagIndex + 1] : undefined;
-
-  const incidents = await fetchOpenIncidents();
-  let candidates = incidents.filter((i) => i.collectorId != null);
-
-  if (onlySourceTargetId) {
-    candidates = candidates.filter((i) => i.sourceTargetId === onlySourceTargetId);
+  const mpnsFlagIndex = args.indexOf("--mpns");
+  const onlyMpns = mpnsFlagIndex >= 0
+    ? args[mpnsFlagIndex + 1]?.split(",").map((mpn) => mpn.trim()).filter(Boolean)
+    : undefined;
+  const maxFlagIndex = args.indexOf("--max-incidents");
+  const maxIncidentsRaw = maxFlagIndex >= 0 ? args[maxFlagIndex + 1] : undefined;
+  const maxIncidents = maxIncidentsRaw == null ? undefined : Number(maxIncidentsRaw);
+  if (maxIncidents != null && (!Number.isInteger(maxIncidents) || maxIncidents <= 0)) {
+    throw new Error(`--max-incidents must be a positive integer, received "${maxIncidentsRaw}"`);
   }
-  if (!force) {
-    candidates = candidates.filter((i) => i.eligibleForAutoHeal);
+
+  const incidents = await fetchOpenIncidents(onlyMpns);
+  const candidates = selectHealCandidates(incidents, {
+    force,
+    sourceTargetId: onlySourceTargetId,
+    maxIncidents,
+  });
+
+  const duplicateCount = incidents.filter((i) => i.collectorId != null).length -
+    new Set(incidents.filter((i) => i.collectorId != null).map((i) => i.collectorId)).size;
+  if (duplicateCount > 0) {
+    console.log(`Collapsed ${duplicateCount} duplicate incident(s) sharing a collector.`);
   }
 
   if (candidates.length === 0) {

@@ -27,10 +27,9 @@ async function dispatchWorkflow(workflowFile: string, inputs: Record<string, str
  * no such ceiling.
  *
  * This also means the button no longer waits for a result inline - it triggers a real run and
- * the UI points at the Actions tab instead of blocking on a response. And because Collect
- * finishing automatically triggers Heal via workflow_run (already proven working), a
- * genuinely heal-worthy failure from this scoped run gets healed the same way a full cron
- * cycle's failures do - no separate heal-dispatch logic needed here anymore.
+ * the UI points at the Actions tab instead of blocking on a response. The Collect workflow
+ * performs its own MPN-scoped heal step after ingestion, so this one dispatch is the complete
+ * collect -> detect -> heal -> verify chain.
  */
 export async function dispatchCollectWorkflow(mpns: string[]): Promise<boolean> {
   return dispatchWorkflow("collect.yml", { mpns: mpns.join(",") });

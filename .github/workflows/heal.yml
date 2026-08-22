@@ -1,9 +1,6 @@
 name: Heal
 
 on:
-  workflow_run:
-    workflows: ["Collect"]
-    types: [completed]
   workflow_dispatch:
     inputs:
       force:
@@ -14,11 +11,14 @@ on:
         description: "Only heal this source target ID (optional)"
         required: false
 
+# Bright Data permits only one refactor job per collector. Serialize this manual path with
+# the Collect workflow's one-click heal while a several-minute refactor is still polling.
+concurrency:
+  group: vantagezero-brightdata-heal
+  cancel-in-progress: false
+
 jobs:
   heal:
-    # Only run after a successful Collect cycle, or on a manual dispatch - no point trying
-    # to heal anything if the trigger itself couldn't even reach the app.
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -19,10 +19,8 @@ const bodySchema = z.object({ mpns: z.array(z.string().min(1)).min(1).max(20) })
  * already reached for the 6-hourly cron.
  *
  * This also means the response is immediate and doesn't carry results - the caller points the
- * user at the Actions tab instead of blocking on one. And because a completed Collect run
- * already triggers Heal automatically via workflow_run (proven working), a genuinely
- * heal-worthy failure from this scoped run gets healed the same way a full cron cycle would -
- * no separate heal-dispatch needed here.
+ * user at the Actions tab instead of blocking on one. The Collect workflow itself continues
+ * with an MPN-scoped heal step, making this single dispatch the complete one-click chain.
  */
 export async function POST(request: Request) {
   const json = await request.json().catch(() => null);

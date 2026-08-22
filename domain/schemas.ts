@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import {
+  MissingRequiredField,
   PartIdentityMismatch,
   SchemaValidationFailed,
   SemanticSanityFailed,
@@ -97,6 +98,16 @@ export function validateDistributorObservation(params: {
     throw new UnsupportedCurrency(`Currency "${obs.currency}" is not supported`, {
       currency: obs.currency,
     });
+  }
+
+  // A distributor saying an item is in stock while returning no purchasable price is an
+  // extraction gap, not a valid zero-price observation. Public distributor PDPs expose
+  // quantity tiers; without them Vantage cannot cost a build even though it can count it.
+  if (obs.stock > 0 && obs.priceBreaks.length === 0) {
+    throw new MissingRequiredField(
+      `${obs.supplier} output has stock but no price breaks`,
+      { stock: obs.stock, currency: obs.currency },
+    );
   }
 
   if (params.priorUnitPriceByQty) {
