@@ -57,6 +57,34 @@ function CriticalityPicker({ value, onChange }: { value: Criticality; onChange: 
   );
 }
 
+/**
+ * One-click starting points. Each is worded so the extractor resolves it against parts that
+ * are already tracked *and* already have a live observation - so the resulting build produces
+ * a real buildable number and a real bottleneck rather than rows reading "— not tracked".
+ * The quantities are chosen to sit above the scarcest part's observed stock, which is what
+ * makes a bottleneck visible at all.
+ */
+const EXAMPLE_BUILDS = [
+  {
+    label: "CAN sensor node",
+    qty: "1000",
+    description:
+      "An STM32-based CAN bus sensor node with a 3.3V regulator, EEPROM, and a USB connector.",
+  },
+  {
+    label: "Ethernet gateway",
+    qty: "500",
+    description:
+      "An STM32F407 industrial gateway with Ethernet PHY, external flash memory, a 3.3V regulator and a USB connector.",
+  },
+  {
+    label: "Motor driver board",
+    qty: "2000",
+    description:
+      "An ATmega328P motor driver board with a Darlington array, a 5V regulator, an op-amp for current sense and a crystal.",
+  },
+] as const;
+
 export function DesignWizard() {
   const router = useRouter();
   const [step, setStep] = useState<"describe" | "review" | "confirm">("describe");
@@ -189,6 +217,23 @@ export function DesignWizard() {
                 placeholder="A battery-powered temperature sensor that reports over Wi-Fi every 10 minutes."
                 maxLength={2000}
               />
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <span className="text-xs text-muted-foreground">Try an example:</span>
+                {EXAMPLE_BUILDS.map((example) => (
+                  <button
+                    key={example.label}
+                    type="button"
+                    onClick={() => {
+                      setDescription(example.description);
+                      setPlannedBuildQty(example.qty);
+                      setError(null);
+                    }}
+                    className="rounded-full border px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                  >
+                    {example.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
