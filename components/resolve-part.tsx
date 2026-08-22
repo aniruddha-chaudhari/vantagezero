@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -89,7 +90,16 @@ export function ResolvePart({ mpn }: { mpn: string }) {
   }
 
   if (status === "done") {
-    return <p className="text-xs text-chart-4">Resolved.</p>;
+    // The parent (e.g. AlternativeParts) fetched its candidate list once and has no reason to
+    // re-fetch just because this one row resolved - router.refresh() only re-runs Server
+    // Component data above us, not this client component's own already-set state. So this
+    // renders its own proof of success rather than leaving a dead-end "Resolved." with
+    // nowhere to go: we know the resolve wrote real data, so link straight to it.
+    return (
+      <Link href={`/dashboard/components/${encodeURIComponent(mpn)}`} className="text-xs font-medium text-chart-4 hover:underline">
+        Resolved — view live data →
+      </Link>
+    );
   }
 
   if (status === "results") {
