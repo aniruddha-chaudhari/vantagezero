@@ -61,8 +61,23 @@ export interface ScraperRunResult {
   url: string;
 }
 
-/** Runs an existing collector against one URL and returns its parsed JSON output. */
+const API_BASE = "https://api.brightdata.com";
+
+/**
+ * Runs an existing collector against one URL and returns its parsed JSON output.
+ *
+ * Branches on runtime rather than always using one transport. `NEXT_RUNTIME` is set by
+ * Next.js/Vercel whenever code runs inside the deployed app (e.g. POST /api/catalog/resolve,
+ * a user confirming a searched candidate) - there, spawning the `bdata` CLI fails outright:
+ * no writable filesystem, no package resolution at request time. Everywhere else (the CLI
+ * script, the CI runner, this terminal) keeps using the CLI unchanged - that path is already
+ * proven by the Collect/Heal cron and there is no reason to touch it.
+ */
 export async function runScraper(collectorId: string, url: string): Promise<ScraperRunResult> {
+  if (process.env.NEXT_RUNTIME) {
+    return runScraperHttp(collectorId, url);
+  }
+
   let stdout: string;
   try {
     stdout = await runCli(["scraper", "run", collectorId, url]);
@@ -86,6 +101,72 @@ export async function runScraper(collectorId: string, url: string): Promise<Scra
   }
 
   return { raw: parsed, collectorId, url };
+}
+
+/**
+ * HTTP equivalent of `bdata scraper run <id> <url>`, matching the CLI's own single-URL path
+ * (@brightdata/cli dist/commands/scraper.js `handle_run_scraper`): the *immediate* pair, not
+ * the batch `/dca/trigger` + `/dca/dataset` pair, which queues behind other account work and
+ * can sit unstarted for minutes.
+ *   POST /dca/trigger_immediate?collector=<id>  with {url}   -> { response_id }
+ *   GET  /dca/get_result?response_id=<id>                    -> 202 while pending,
+ *                                                                200 with the rows once done
+ * `timeoutMs` stays below the route's `maxDuration` so a slow collector surfaces as a
+ * ScraperRunFailed (which opens an incident) rather than the platform killing the function
+ * mid-write.
+ */
+async function runScraperHttp(collectorId: string, url: string, timeoutMs = 100_000): Promise<ScraperRunResult> {
+  const pollMs = 3_000;
+  const key = apiKey();
+  const headers = { Authorization: `Bearer ${key}`, "Content-Type": "application/json" };
+  const fail = (message: string, extra: Record<string, unknown> = {}) =>
+    new ScraperRunFailed(message, { collectorId, url, ...extra });
+
+  let responseId: string;
+  try {
+    const res = await fetch(`${API_BASE}/dca/trigger_immediate?collector=${encodeURIComponent(collectorId)}`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ url }),
+    });
+    const text = await res.text();
+    if (!res.ok) throw new Error(`${res.status} ${text.slice(0, 300)}`);
+    const body = JSON.parse(text) as { response_id?: string };
+    if (!body.response_id) throw new Error(`trigger returned no response_id: ${text.slice(0, 300)}`);
+    responseId = body.response_id;
+  } catch (err) {
+    throw fail(`Bright Data run failed for collector ${collectorId}`, {
+      cause: err instanceof Error ? redactKey(err.message, key) : String(err),
+    });
+  }
+
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const res = await fetch(`${API_BASE}/dca/get_result?response_id=${encodeURIComponent(responseId)}`, { headers });
+    const text = await res.text();
+
+    if (res.status === 202) {
+      await new Promise((r) => setTimeout(r, pollMs));
+      continue;
+    }
+    if (!res.ok) {
+      throw fail(`Bright Data run failed for collector ${collectorId}`, {
+        responseId,
+        cause: `${res.status} ${text.slice(0, 300)}`,
+      });
+    }
+
+    try {
+      return { raw: JSON.parse(text), collectorId, url };
+    } catch {
+      throw fail(`Bright Data run for collector ${collectorId} did not return valid JSON`, {
+        responseId,
+        stdout: text.slice(0, 2000),
+      });
+    }
+  }
+
+  throw fail(`Bright Data run for collector ${collectorId} did not finish within ${timeoutMs}ms`, { responseId });
 }
 
 /**
