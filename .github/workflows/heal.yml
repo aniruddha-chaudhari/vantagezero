@@ -34,6 +34,9 @@ jobs:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: |
           ARGS=""
-          if [ "${{ github.event.inputs.force }}" = "true" ]; then ARGS="$ARGS --force"; fi
+          # A source-target-scoped manual run is an explicit demo/operator action, so it
+          # bypasses cooldown automatically. This avoids relying on GitHub rendering the
+          # optional boolean checkbox while keeping unscoped runs rate-disciplined.
+          if [ "${{ github.event.inputs.force }}" = "true" ] || [ -n "${{ github.event.inputs.sourceTargetId }}" ]; then ARGS="$ARGS --force"; fi
           if [ -n "${{ github.event.inputs.sourceTargetId }}" ]; then ARGS="$ARGS --source-target-id ${{ github.event.inputs.sourceTargetId }}"; fi
           npx tsx scripts/heal-loop.ts $ARGS
