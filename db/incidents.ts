@@ -209,7 +209,22 @@ export async function resolveIncident(incidentId: string, input: ResolveIncident
   const [incident] = await db.select().from(scraperIncidents).where(eq(scraperIncidents.id, incidentId));
   if (!incident) throw new Error(`incident ${incidentId} not found`);
 
-  await db
+  let reingestResult = null;
+  if (input.status === "resolved" && (input.resolution === "auto_approved" || input.resolution === "human_approved")) {
+    reingestResult = await ingestSourceTarget(incident.sourceTargetId, {
+      triggeredBy: input.triggeredBy === "cron" ? "cron" : "manual",
+    });
+
+    // Approval is not resolution. Bright Data may report `save_new_template` before the
+    // effective production collector has propagated (or even when promotion silently did
+    // not happen). Leave the incident open so the CI caller can wait and retry verification.
+    if (!reingestResult.ok) {
+      return { incident, reingestResult, verified: false };
+    }
+  }
+
+  const resolvedAt = input.status === "resolved" ? new Date() : null;
+  const [updatedIncident] = await db
     .update(scraperIncidents)
     .set({
       status: input.status,
@@ -217,18 +232,27 @@ export async function resolveIncident(incidentId: string, input: ResolveIncident
       gateResultsJson: input.gateResultsJson ?? incident.gateResultsJson,
       healPrompt: input.healPrompt ?? incident.healPrompt,
       healStartedAt: incident.healStartedAt ?? new Date(),
-      resolvedAt: input.status === "resolved" ? new Date() : null,
+      resolvedAt,
     })
-    .where(eq(scraperIncidents.id, incidentId));
+    .where(eq(scraperIncidents.id, incidentId))
+    .returning();
 
-  let reingestResult = null;
-  if (input.status === "resolved" && (input.resolution === "auto_approved" || input.resolution === "human_approved")) {
-    reingestResult = await ingestSourceTarget(incident.sourceTargetId, {
-      triggeredBy: input.triggeredBy === "cron" ? "cron" : "manual",
-    });
+  // Failed verification attempts open fresh extraction incidents. Once a later verification
+  // succeeds, resolve those duplicates too; do not touch identity/network incidents.
+  if (input.status === "resolved" && reingestResult?.ok) {
+    await db
+      .update(scraperIncidents)
+      .set({ status: "resolved", resolution: input.resolution, resolvedAt })
+      .where(
+        and(
+          eq(scraperIncidents.sourceTargetId, incident.sourceTargetId),
+          eq(scraperIncidents.status, "open"),
+          inArray(scraperIncidents.incidentType, HEAL_ELIGIBLE_INCIDENT_TYPES),
+        ),
+      );
   }
 
-  return { incident, reingestResult };
+  return { incident: updatedIncident, reingestResult, verified: reingestResult == null || reingestResult.ok };
 }
 
 /**

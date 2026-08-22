@@ -20,6 +20,11 @@
 import { approveHeal, healScraper } from "@/brightdata/client";
 import { evaluateHealPreview, type HealTarget } from "@/brightdata/heal";
 import { selectHealCandidates } from "@/domain/heal-queue";
+import {
+  describeVerificationFailure,
+  type HealResolutionResponse,
+  verificationSucceeded,
+} from "@/domain/heal-verification";
 import { sendSlackAlert } from "@/lib/slack";
 
 const APP_BASE_URL = (process.env.APP_BASE_URL ?? "http://localhost:3000").replace(/\/$/, "");
@@ -61,7 +66,10 @@ async function fetchLatestValidSnapshot(sourceTargetId: string) {
   return res.json();
 }
 
-async function resolveIncidentApi(incidentId: string, body: Record<string, unknown>) {
+async function resolveIncidentApi(
+  incidentId: string,
+  body: Record<string, unknown>,
+): Promise<HealResolutionResponse> {
   const res = await fetch(`${APP_BASE_URL}/api/incidents/${incidentId}/resolve`, {
     method: "POST",
     headers: authHeaders(),
@@ -69,6 +77,42 @@ async function resolveIncidentApi(incidentId: string, body: Record<string, unkno
   });
   if (!res.ok) throw new Error(`POST /api/incidents/${incidentId}/resolve failed: ${res.status} ${await res.text()}`);
   return res.json();
+}
+
+const INITIAL_PROPAGATION_DELAY_MS = 30_000;
+const VERIFICATION_RETRY_DELAY_MS = 15_000;
+const MAX_VERIFICATION_ATTEMPTS = 3;
+
+async function verifyApprovedHeal(incident: OpenIncident, prompt: string, gateResultsJson: unknown): Promise<void> {
+  console.log(`  waiting 30s for the saved production template to propagate...`);
+  await new Promise((resolve) => setTimeout(resolve, INITIAL_PROPAGATION_DELAY_MS));
+
+  for (let attempt = 1; attempt <= MAX_VERIFICATION_ATTEMPTS; attempt++) {
+    console.log(`  verification scrape ${attempt}/${MAX_VERIFICATION_ATTEMPTS}...`);
+    const result = await resolveIncidentApi(incident.id, {
+      resolution: "auto_approved",
+      status: "resolved",
+      healPrompt: prompt,
+      gateResultsJson,
+      triggeredBy: "cron",
+    });
+
+    if (verificationSucceeded(result)) {
+      console.log(`  verification passed; effective collector returned valid data.`);
+      return;
+    }
+
+    console.warn(`  verification failed: ${describeVerificationFailure(result)}`);
+    if (attempt < MAX_VERIFICATION_ATTEMPTS) {
+      console.log(`  waiting 15s before checking the effective collector again...`);
+      await new Promise((resolve) => setTimeout(resolve, VERIFICATION_RETRY_DELAY_MS));
+    }
+  }
+
+  throw new Error(
+    `Bright Data reported a saved template, but the effective collector failed ` +
+      `${MAX_VERIFICATION_ATTEMPTS} verification scrapes; incident left open`,
+  );
 }
 
 /** Never states the expected value on purpose (§12) - that would bias the heal toward
@@ -143,14 +187,8 @@ async function processIncident(incident: OpenIncident): Promise<void> {
     // paused job resume but leaves the collector's saved template untouched, so the next
     // cron cycle re-breaks on the same selector and re-heals the identical break.
     await approveHeal(incident.collectorId, incident.sourceTarget.sourceUrl, { reject: false, autoSave: true });
-    await resolveIncidentApi(incident.id, {
-      resolution: "auto_approved",
-      status: "resolved",
-      healPrompt: prompt,
-      gateResultsJson: evaluation.results,
-      triggeredBy: "cron",
-    });
-    console.log(`  -> AUTO-APPROVED, re-verified, incident resolved.`);
+    await verifyApprovedHeal(incident, prompt, evaluation.results);
+    console.log(`  -> AUTO-APPROVED, effective production collector verified, incident resolved.`);
     return;
   }
 
@@ -222,13 +260,18 @@ async function main() {
   }
 
   console.log(`Processing ${candidates.length} incident(s)${force ? " (--force)" : ""}...`);
+  let failureCount = 0;
   for (const incident of candidates) {
     try {
       await processIncident(incident);
     } catch (err) {
-      // One incident's failure must never take down the whole run or redden CI.
       console.error(`  error while processing ${incident.sourceTarget.mpn}:`, err instanceof Error ? err.message : err);
+      failureCount++;
     }
+  }
+
+  if (failureCount > 0) {
+    throw new Error(`${failureCount} healing operation(s) failed; see the incident logs above`);
   }
 }
 
@@ -236,5 +279,5 @@ main()
   .then(() => process.exit(0))
   .catch((err) => {
     console.error("heal-loop fatal error:", err);
-    process.exit(0); // exit green regardless - an escalation or a caught error here is not a CI failure
+    process.exit(1);
   });
