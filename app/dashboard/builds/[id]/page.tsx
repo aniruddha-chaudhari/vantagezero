@@ -5,6 +5,7 @@ import { TriangleAlert } from "lucide-react";
 import { BottleneckRankingChart } from "@/components/charts/bottleneck-ranking";
 import { CoverageBarsChart } from "@/components/charts/coverage-bars";
 import { ComponentImage } from "@/components/component-image";
+import { RefreshButton } from "@/components/refresh-button";
 import { ResolvePart } from "@/components/resolve-part";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -51,16 +52,19 @@ export default async function BuildDetailPage({ params }: { params: Promise<{ id
   return (
     <div className="space-y-6">
       <div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant={buildability.partsAwaitingData > 0 ? "secondary" : "outline"}>
-            {buildability.monitoredCount} of {buildability.totalCount} parts monitored
-            {buildability.partsAwaitingData > 0 && ` · ${buildability.partsAwaitingData} awaiting first observation`}
-          </Badge>
-          {singleSourcedCount > 0 && (
-            <Badge variant="outline" className="border-chart-4/25 bg-chart-4/10 text-chart-4">
-              {singleSourcedCount} single-sourced
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant={buildability.partsAwaitingData > 0 ? "secondary" : "outline"}>
+              {buildability.monitoredCount} of {buildability.totalCount} parts monitored
+              {buildability.partsAwaitingData > 0 && ` · ${buildability.partsAwaitingData} awaiting first observation`}
             </Badge>
-          )}
+            {singleSourcedCount > 0 && (
+              <Badge variant="outline" className="border-chart-4/25 bg-chart-4/10 text-chart-4">
+                {singleSourcedCount} single-sourced
+              </Badge>
+            )}
+          </div>
+          {monitoredParts.length > 0 && <RefreshButton mpns={monitoredParts.slice(0, 20).map((p) => p.mpn)} />}
         </div>
         <h1 className="mt-3 text-2xl font-semibold tracking-tight sm:text-[28px]">{product.name}</h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">

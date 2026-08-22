@@ -19,7 +19,7 @@ type Status = "idle" | "searching" | "results" | "resolving" | "done" | "error";
  * API for candidate product pages, let the judge confirm one, then run the real PDP collector
  * on it. A wrong pick is caught the same way catalog seeding is - by identity validation.
  */
-export function ResolvePart({ mpn }: { mpn: string }) {
+export function ResolvePart({ mpn, onResolved }: { mpn: string; onResolved?: () => void }) {
   const router = useRouter();
   const [status, setStatus] = useState<Status>("idle");
   const [candidates, setCandidates] = useState<Candidate[]>([]);
@@ -66,6 +66,7 @@ export function ResolvePart({ mpn }: { mpn: string }) {
         return;
       }
       setStatus("done");
+      onResolved?.();
       router.refresh();
     } catch (err) {
       setStatus("error");

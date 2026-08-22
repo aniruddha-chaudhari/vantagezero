@@ -282,6 +282,7 @@ export interface ComponentDetail {
   state: "ok" | "failed";
   distributorSources: ComponentSourceDetail[];
   manufacturer: {
+    sourceTargetId: string;
     supplier: string;
     sourceUrl: string;
     marketingStatus: string;
@@ -346,6 +347,7 @@ export async function getComponentDetail(mpn: string): Promise<ComponentDetail> 
       .limit(1);
     if (!latest) continue;
     manufacturer = {
+      sourceTargetId: target.id,
       supplier: target.sourceName,
       sourceUrl: target.sourceUrl,
       marketingStatus: latest.marketingStatus,
@@ -414,6 +416,44 @@ export async function getProductsMonitoringMpn(mpn: string): Promise<Array<{ id:
   const seen = new Map<string, { id: string; name: string }>();
   for (const row of rows) seen.set(row.id, row);
   return [...seen.values()];
+}
+
+/**
+ * Every collector-backed source target for a set of MPNs (both distributor and manufacturer),
+ * enabled ones only - what a "Refresh data" action re-ingests. Case-insensitive for the same
+ * reason getComponentDetail is.
+ */
+export async function getSourceTargetIdsForMpns(
+  mpns: string[],
+): Promise<Array<{ id: string; mpn: string; sourceName: string }>> {
+  if (mpns.length === 0) return [];
+  const normalized = mpns.map((m) => m.trim().toUpperCase());
+  return db
+    .select({ id: sourceTargets.id, mpn: sourceTargets.mpn, sourceName: sourceTargets.sourceName })
+    .from(sourceTargets)
+    .where(
+      and(
+        inArray(sql`upper(${sourceTargets.mpn})`, normalized),
+        isNotNull(sourceTargets.collectorId),
+        eq(sourceTargets.enabled, true),
+      ),
+    );
+}
+
+/**
+ * Every build with a BOM line for this exact part, monitored or not - used to offer
+ * "replace with this alternative" on the component detail page. Case-insensitive, matching
+ * getComponentDetail's own lookup, since a BOM line typed by hand may not match a scraped
+ * MPN's casing exactly.
+ */
+export async function getBuildsUsingMpn(mpn: string): Promise<Array<{ id: string; name: string; bomItemId: string }>> {
+  const normalized = mpn.trim().toUpperCase();
+  const rows = await db
+    .select({ id: products.id, name: products.name, bomItemId: bomItems.id })
+    .from(bomItems)
+    .innerJoin(products, eq(bomItems.productId, products.id))
+    .where(sql`upper(${bomItems.mpn}) = ${normalized}`);
+  return rows;
 }
 
 export interface CollectorHealth {

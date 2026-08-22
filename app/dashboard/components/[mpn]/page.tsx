@@ -6,9 +6,10 @@ import { PriceBreakCurveChart } from "@/components/charts/price-break-curve";
 import { SourceContributionChart } from "@/components/charts/source-contribution";
 import { StockHistoryChart } from "@/components/charts/stock-history";
 import { ComponentImage } from "@/components/component-image";
+import { RefreshButton } from "@/components/refresh-button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { getComponentDetail } from "@/db/queries";
+import { getBuildsUsingMpn, getComponentDetail } from "@/db/queries";
 
 function unitPriceAtQty(priceBreaks: Array<{ minQty: number; unitPrice: string }>, qty: number): number | null {
   if (priceBreaks.length === 0) return null;
@@ -45,6 +46,7 @@ export default async function ComponentDetailPage({
   const { qty, shipDate } = await searchParams;
   const mpn = decodeURIComponent(encodedMpn);
   const detail = await getComponentDetail(mpn);
+  const buildsUsingThisPart = await getBuildsUsingMpn(mpn);
   const requiredQty = qty ? Number(qty) : undefined;
 
   // Stock stays grouped by region (never summed across them, master-plan §5) - a UK pool and
@@ -81,15 +83,18 @@ export default async function ComponentDetailPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start gap-4">
-        <ComponentImage src={primaryImage} alt={mpn} className="size-24" expandable />
-        <div>
-          <h1 className="font-mono text-2xl font-semibold tracking-[-0.02em]">{mpn}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {detail.distributorSources.length} source{detail.distributorSources.length === 1 ? "" : "s"} tracked
-            {detail.manufacturer ? ` · lifecycle from ${detail.manufacturer.supplier}` : ""}
-          </p>
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-start gap-4">
+          <ComponentImage src={primaryImage} alt={mpn} className="size-24" expandable />
+          <div>
+            <h1 className="font-mono text-2xl font-semibold tracking-[-0.02em]">{mpn}</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {detail.distributorSources.length} source{detail.distributorSources.length === 1 ? "" : "s"} tracked
+              {detail.manufacturer ? ` · lifecycle from ${detail.manufacturer.supplier}` : ""}
+            </p>
+          </div>
         </div>
+        <RefreshButton mpns={[mpn]} />
       </div>
 
       <Card>
@@ -235,7 +240,7 @@ export default async function ComponentDetailPage({
         </Card>
       )}
 
-      <AlternativeParts mpn={mpn} />
+      <AlternativeParts mpn={mpn} builds={buildsUsingThisPart} />
 
       <section className="grid gap-4 xl:grid-cols-2">
         {priceSources.length > 0 ? (
