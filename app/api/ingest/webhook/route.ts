@@ -20,6 +20,12 @@ import { requireIngestToken } from "@/lib/api-auth";
  * The delivered payload is the same JSON array a direct API download would return - the
  * normalizer functions already handle that shape identically to a CLI `bdata scraper run`
  * result, so no separate parsing path exists here.
+ *
+ * Not currently wired up: this account's Scraper Studio UI didn't expose a schedule/webhook
+ * destination field on any collector we checked (only an account-level event-notification
+ * webhook, a different feature, was findable). Collection runs on the GitHub Actions cron
+ * (.github/workflows/collect.yml) instead. This route is left in place, tested, and ready -
+ * pointing a schedule at it is the only remaining step if that UI option turns up later.
  */
 export async function POST(request: Request) {
   const authError = requireIngestToken(request);
