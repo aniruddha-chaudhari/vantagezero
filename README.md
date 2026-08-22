@@ -100,6 +100,52 @@ live run — not hand-written:
 | STMicroelectronics (manufacturer) | [`brightdata/examples/st-lifecycle-pdp-run.json`](brightdata/examples/st-lifecycle-pdp-run.json) |
 | A heal in progress | [`brightdata/examples/st-lifecycle-heal.json`](brightdata/examples/st-lifecycle-heal.json) |
 
+Two of those inline, so the shape is visible without opening a file. Raw output from the LCSC
+collector (`c_mt44s8op4nh52dumy`) against a live product page:
+
+```json
+[
+  {
+    "mpn": "STM32F103C8T6",
+    "manufacturer": "ST",
+    "lcsc_part_number": "C8734",
+    "in_stock_quantity": 57666,
+    "package": "LQFP-48(7x7)",
+    "minimum_order_quantity": 1,
+    "order_multiple": 1,
+    "currency": "USD",
+    "price_breaks": [
+      { "min_qty": "1 +", "unit_price": { "value": 1.7292, "currency": "USD", "symbol": "$" } },
+      { "min_qty": "1,000 +", "unit_price": { "value": 1.0859, "currency": "USD", "symbol": "$" } }
+    ],
+    "product_image_url": "https://assets.lcsc.com/images/lcsc/900x900/20230221_STMicroelectronics-STM32F103C8T6_C8734_front.jpg",
+    "input": { "url": "https://www.lcsc.com/product-detail/C8734.html" }
+  }
+]
+```
+
+Every field name here is source-specific and untrusted until normalized — `normalizeLcsc()`
+(`brightdata/normalize.ts`) maps it into the same canonical shape every other source produces.
+Abbreviated below (null fields omitted) for readability - this is the actual shape Zod
+validates before a row is ever written:
+
+```json
+{
+  "mpn": "STM32F103C8T6",
+  "supplier": "LCSC",
+  "region": "China",
+  "stock": 57666,
+  "currency": "USD",
+  "minimumOrderQty": 1,
+  "orderMultiple": 1,
+  "priceBreaks": [
+    { "minQty": 1, "unitPrice": 1.7292 },
+    { "minQty": 1000, "unitPrice": 1.0859 }
+  ],
+  "package": "LQFP-48(7x7)"
+}
+```
+
 ## Getting started
 
 ```bash
