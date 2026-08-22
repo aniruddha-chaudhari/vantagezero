@@ -45,22 +45,39 @@ async function getCollectorId(sourceName: string): Promise<string | null> {
   return row?.collectorId ?? null;
 }
 
-/** One candidate PDP URL per distributor that already has a registered collector. */
+/**
+ * One candidate PDP URL per distributor that already has a registered collector.
+ *
+ * A transient SERP hiccup on one distributor (occasional flakiness we've seen before, e.g.
+ * "redirect location was rejected") must not take down the other's results - each search
+ * stands alone. But if *every* search errored, that is not "no candidates found": it means
+ * search itself is unavailable, and reporting an empty list would present a structural
+ * failure as a legitimate negative result. That case throws instead, so the caller surfaces
+ * a real error rather than "we looked and there's nothing there."
+ *
+ * This distinction is load-bearing in production: `searchWeb` shells out to the `bdata` CLI,
+ * which cannot run inside a stock serverless function (no writable filesystem, no install
+ * step at request time), so on a Vercel deployment every distributor fails together and this
+ * throw is the honest answer.
+ */
 export async function searchCatalogCandidates(mpn: string): Promise<CatalogCandidate[]> {
   const candidates: CatalogCandidate[] = [];
+  let attempted = 0;
+  let failed = 0;
+  let lastError: string | null = null;
 
   for (const distributor of SEARCHABLE_DISTRIBUTORS) {
     const collectorId = await getCollectorId(distributor.sourceName);
     if (!collectorId) continue;
+    attempted++;
 
-    // A transient SERP hiccup on one distributor (occasional flakiness we've seen before,
-    // e.g. "redirect location was rejected") must not take down the other distributor's
-    // results - each search stands alone.
     let result: SerpResult;
     try {
       result = (await searchWeb(`${mpn} site:${distributor.domain}`)) as SerpResult;
     } catch (err) {
-      console.error(`Search failed for ${distributor.sourceName}:`, err instanceof Error ? err.message : err);
+      failed++;
+      lastError = err instanceof Error ? err.message : String(err);
+      console.error(`Search failed for ${distributor.sourceName}:`, lastError);
       continue;
     }
 
@@ -71,6 +88,13 @@ export async function searchCatalogCandidates(mpn: string): Promise<CatalogCandi
         break;
       }
     }
+  }
+
+  if (attempted > 0 && failed === attempted) {
+    throw new Error(
+      `Live part search is unavailable in this environment - all ${attempted} distributor searches failed. ` +
+        `Last error: ${lastError}`,
+    );
   }
 
   return candidates;
