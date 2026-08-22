@@ -59,13 +59,14 @@ component_observations / lifecycle_observations row     scraper_incidents row op
 A `.github/workflows/collect.yml` cron calls the same endpoint every 6 hours so history
 accumulates unattended.
 
-## Sources (region: UK + India, each chosen by a live Day-1 probe, not preference)
+## Sources (region: UK + India + China, each chosen by a live Day-1 probe, not preference)
 
 | Role | Source | Collector |
 |---|---|---|
 | Distributor A | RS Online (`uk.rs-online.com`) | `c_msy7solmrxow00enh` |
 | Distributor B | element14 / Farnell (`uk.farnell.com`) | `c_msyu5nup1i1bjgowvk` |
 | Distributor C | DigiKey India (`www.digikey.in`) | `c_mt1cydk063bbxlpux` |
+| Distributor D | LCSC (`www.lcsc.com`) | `c_mt44s8op4nh52dumy` |
 | Manufacturer | STMicroelectronics (`www.st.com`) | `c_msyu5pk9lpeacevev` |
 
 Stock is never summed across regions or across element14/Newark (both Avnet/Farnell) into one
@@ -79,6 +80,25 @@ renders with a full JS browser session and even then exposes stock as a boolean
 DigiKey India cleared the bar: exact stock counts, INR price breaks, and manufacturer lead
 time, all via the plain Web Unlocker (no JS rendering needed), and `/en/products/detail/*`
 is not robots-disallowed.
+
+LCSC was added as a fourth distributor to cover a China-based source, verified live before
+being wired in: triggered directly via `/dca/trigger`, polled `/dca/dataset` for the real
+payload, then confirmed again through the actual `bdata scraper run` → normalize → validate
+pipeline (stock=57666, currency=USD) before any code assumed the shape of its output.
+
+## Example structured output
+
+Raw collector output (pre-normalization), one file per source, each captured from a real
+live run — not hand-written:
+
+| Source | File |
+|---|---|
+| RS Online | [`brightdata/examples/rs-uk-pdp-run.json`](brightdata/examples/rs-uk-pdp-run.json) |
+| element14 | [`brightdata/examples/e14-uk-pdp-run.json`](brightdata/examples/e14-uk-pdp-run.json) |
+| DigiKey India | [`brightdata/examples/digikey-in-pdp-run.json`](brightdata/examples/digikey-in-pdp-run.json) |
+| LCSC | [`brightdata/examples/lcsc-cn-pdp-run.json`](brightdata/examples/lcsc-cn-pdp-run.json) |
+| STMicroelectronics (manufacturer) | [`brightdata/examples/st-lifecycle-pdp-run.json`](brightdata/examples/st-lifecycle-pdp-run.json) |
+| A heal in progress | [`brightdata/examples/st-lifecycle-heal.json`](brightdata/examples/st-lifecycle-heal.json) |
 
 ## Getting started
 
@@ -96,7 +116,8 @@ Required environment variables (`.env.local`, never committed):
 | `DATABASE_URL` | Postgres connection string (Neon/Supabase) |
 | `BRIGHTDATA_API_KEY` | Passed explicitly to every `bdata` CLI call |
 | `INGEST_API_TOKEN` | Bearer token required by `POST /api/ingest/brightdata` and the incidents/observations API (set the same value as a GitHub Actions secret, plus `APP_BASE_URL` pointing at your deployed URL, to enable the cron) |
-| `SLACK_WEBHOOK_URL` | Optional. A Slack Incoming Webhook URL - alerting no-ops entirely when unset |
+| `SLACK_WEBHOOK_URL` | Optional. A Slack Incoming Webhook URL. Posts scraper incidents, heal escalations and critical buildability alerts - unset entirely no-ops all Slack output |
+| `SLACK_ACTIVITY_FEED` | Optional. Set to `1` alongside `SLACK_WEBHOOK_URL` to also post one line per *successful* scrape - a live activity feed for a demo or a single-target run. Left unset on the cron and on bulk backfills (the catalog resolver): an `--all` cycle posts one per enabled source target, and Slack rate-limits that burst hard enough to drop the incident alerts underneath it |
 
 ## Current status (Day 2)
 
