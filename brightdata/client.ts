@@ -88,10 +88,46 @@ export async function runScraper(collectorId: string, url: string): Promise<Scra
   return { raw: parsed, collectorId, url };
 }
 
-/** Runs a web search (SERP) query, used for resolving MPNs to distributor/manufacturer PDP URLs. */
+/**
+ * Runs a web search (SERP) query, used for resolving MPNs to distributor/manufacturer PDP URLs.
+ *
+ * Uses Bright Data's HTTP SERP endpoint directly rather than `bdata search`, because this is
+ * the one collection path a *user* triggers synchronously from the deployed app ("Search for
+ * this part"). Spawning the CLI needs a writable filesystem and package resolution at request
+ * time, which a serverless function does not provide - so the CLI version worked locally and
+ * failed in production. Everything else here still goes through the CLI, which is correct:
+ * those paths only ever run from a terminal or a CI runner.
+ *
+ * `brd_json=1` makes the SERP API return parsed JSON with an `organic[]` array - the exact
+ * shape callers already expect - instead of raw HTML we would have to scrape ourselves.
+ * Mirrors the CLI's own construction (see @brightdata/cli dist/commands/search.js).
+ */
+const SERP_ENDPOINT = "https://api.brightdata.com/request";
+
 export async function searchWeb(query: string): Promise<unknown> {
-  const stdout = await runCli(["search", query]);
-  return JSON.parse(stdout);
+  const zone = process.env.BRIGHTDATA_SERP_ZONE;
+  if (!zone) {
+    throw new Error("BRIGHTDATA_SERP_ZONE is not set (the Bright Data zone name used for SERP requests)");
+  }
+
+  const searchUrl = `https://www.google.com/search?${new URLSearchParams({ q: query, brd_json: "1" })}`;
+
+  const res = await fetch(SERP_ENDPOINT, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey()}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ zone, url: searchUrl, format: "raw" }),
+  });
+
+  const text = await res.text();
+  if (!res.ok) {
+    throw new Error(`Bright Data SERP request failed: ${res.status} ${text.slice(0, 300)}`);
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(`Bright Data SERP request did not return JSON: ${text.slice(0, 300)}`);
+  }
 }
 
 /** Heals a collector in place from a natural-language description of what broke. */
