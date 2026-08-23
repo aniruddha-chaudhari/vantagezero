@@ -79,12 +79,28 @@ async function resolveIncidentApi(
   return res.json();
 }
 
-const INITIAL_PROPAGATION_DELAY_MS = 30_000;
-const VERIFICATION_RETRY_DELAY_MS = 15_000;
-const MAX_VERIFICATION_ATTEMPTS = 3;
+/**
+ * Bright Data gives no signal for "the saved template has propagated to the effective
+ * production collector" - `save_new_template` can report before that's actually true. A
+ * flat initial-wait + flat retry-wait guesses one propagation time for every collector, so
+ * on a slow day the loop burns all its retries before propagation ever finishes, and on a
+ * fast day it wastes time waiting after the collector was already ready. Exponential
+ * backoff (30s, 30s, 60s, 120s, cumulative 240s vs. the old flat 60s) trades a slower
+ * first-attempt-failure signal for a schedule that actually reaches typical propagation
+ * lag before giving up, and is fully deterministic given MAX_VERIFICATION_ATTEMPTS - no
+ * randomness, same schedule every run. Overridable via env for tuning without a code change.
+ */
+const INITIAL_PROPAGATION_DELAY_MS = Number(process.env.HEAL_VERIFY_INITIAL_DELAY_MS ?? 30_000);
+const VERIFICATION_BASE_RETRY_DELAY_MS = Number(process.env.HEAL_VERIFY_RETRY_DELAY_MS ?? 30_000);
+const MAX_VERIFICATION_ATTEMPTS = Number(process.env.HEAL_VERIFY_MAX_ATTEMPTS ?? 4);
+const MAX_VERIFICATION_RETRY_DELAY_MS = 120_000;
+
+function verificationRetryDelayMs(attempt: number): number {
+  return Math.min(VERIFICATION_BASE_RETRY_DELAY_MS * 2 ** (attempt - 1), MAX_VERIFICATION_RETRY_DELAY_MS);
+}
 
 async function verifyApprovedHeal(incident: OpenIncident, prompt: string, gateResultsJson: unknown): Promise<void> {
-  console.log(`  waiting 30s for the saved production template to propagate...`);
+  console.log(`  waiting ${INITIAL_PROPAGATION_DELAY_MS / 1000}s for the saved production template to propagate...`);
   await new Promise((resolve) => setTimeout(resolve, INITIAL_PROPAGATION_DELAY_MS));
 
   for (let attempt = 1; attempt <= MAX_VERIFICATION_ATTEMPTS; attempt++) {
@@ -104,8 +120,9 @@ async function verifyApprovedHeal(incident: OpenIncident, prompt: string, gateRe
 
     console.warn(`  verification failed: ${describeVerificationFailure(result)}`);
     if (attempt < MAX_VERIFICATION_ATTEMPTS) {
-      console.log(`  waiting 15s before checking the effective collector again...`);
-      await new Promise((resolve) => setTimeout(resolve, VERIFICATION_RETRY_DELAY_MS));
+      const delay = verificationRetryDelayMs(attempt);
+      console.log(`  waiting ${delay / 1000}s before checking the effective collector again...`);
+      await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
 
@@ -132,6 +149,7 @@ function buildHealPrompt(incident: OpenIncident, sharpen: boolean): string {
 }
 
 interface HealAttemptResult {
+  jobId: string;
   prompt: string;
   rawPreview: unknown;
   evaluation: ReturnType<typeof evaluateHealPreview>;
@@ -143,12 +161,13 @@ async function attemptHeal(incident: OpenIncident, sharpen: boolean): Promise<He
   const startedAt = Date.now();
   console.log(`  Bright Data heal started; this normally takes several minutes...`);
 
-  const healResult = (await healScraper(incident.collectorId!, incident.sourceTarget.sourceUrl, prompt)) as {
-    preview_result?: unknown;
-  };
+  const healResult = await healScraper(incident.collectorId!, incident.sourceTarget.sourceUrl, prompt);
   console.log(`  Bright Data heal returned after ${Math.round((Date.now() - startedAt) / 1000)}s.`);
   if (healResult.preview_result == null) {
     throw new Error("bdata scraper heal did not return a preview_result");
+  }
+  if (!healResult.id) {
+    throw new Error("bdata scraper heal did not return a job id");
   }
 
   const snapshot = await fetchLatestValidSnapshot(incident.sourceTargetId);
@@ -160,7 +179,7 @@ async function attemptHeal(incident: OpenIncident, sharpen: boolean): Promise<He
     console.log(`    - ${r.gate}: ${r.passed ? "pass" : "FAIL"} (${r.reason})`);
   }
 
-  return { prompt, rawPreview: healResult.preview_result, evaluation };
+  return { jobId: healResult.id, prompt, rawPreview: healResult.preview_result, evaluation };
 }
 
 async function processIncident(incident: OpenIncident): Promise<void> {
@@ -176,24 +195,24 @@ async function processIncident(incident: OpenIncident): Promise<void> {
 
   if (result.evaluation.decision === "auto_reject") {
     console.log("  rejecting first preview, retrying once with a sharper prompt...");
-    await approveHeal(incident.collectorId, incident.sourceTarget.sourceUrl, { reject: true });
+    await approveHeal(incident.collectorId, result.jobId, { reject: true });
     result = await attemptHeal(incident, true);
   }
 
-  const { prompt, evaluation } = result;
+  const { jobId, prompt, evaluation } = result;
 
   if (evaluation.decision === "auto_approve") {
     // autoSave persists the healed template to production. Approving without it lets the
     // paused job resume but leaves the collector's saved template untouched, so the next
     // cron cycle re-breaks on the same selector and re-heals the identical break.
-    await approveHeal(incident.collectorId, incident.sourceTarget.sourceUrl, { reject: false, autoSave: true });
+    await approveHeal(incident.collectorId, jobId, { reject: false, autoSave: true });
     await verifyApprovedHeal(incident, prompt, evaluation.results);
     console.log(`  -> AUTO-APPROVED, effective production collector verified, incident resolved.`);
     return;
   }
 
   if (evaluation.decision === "auto_reject") {
-    await approveHeal(incident.collectorId, incident.sourceTarget.sourceUrl, { reject: true });
+    await approveHeal(incident.collectorId, jobId, { reject: true });
     await resolveIncidentApi(incident.id, {
       resolution: "auto_rejected",
       status: "rejected",
