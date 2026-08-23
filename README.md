@@ -292,16 +292,4 @@ Tests: `npm run test:gates` (`domain/gates.test.ts`).
 
 ## AI assistance disclosure
 
-Built with an AI coding assistant (Claude Code) for scaffolding, components and boilerplate; sourcing, gate logic, schema design and normalizer mappings were my calls. At runtime, Groq powers two assistive features ("Help me choose parts", alternative-part suggestions) — every part it names is re-verified against the tracked catalog. **No scraped value is ever produced by an LLM.**
-
-## Limitations
-
-Vantage does **not** guarantee that:
-
-- Inventory is still available when a PO is placed, or that distributor stock is globally allocatable
-- Lead-time text equals a delivery date, or that these distributors represent the whole market
-- Production ships on component availability alone
-- Buildable-unit math accounts for minimum order quantity or order multiple (both are captured, but the math is plain floor division)
-
-**Known gap:** DigiKey India doesn't reliably extract price breaks on every page — stock,
-currency and lead time are unaffected, and the UI shows "—" rather than a wrong number.
+Built with an AI coding assistant (Claude Code) for scaffolding, components and boilerplate; sourcing, gate logic, schema design and normalizer mappings were my calls.
