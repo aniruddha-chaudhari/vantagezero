@@ -32,40 +32,6 @@ resolve to one of three outcomes: **approve, reject, or escalate.**
 
 [![Watch the demo](https://img.youtube.com/vi/BlsxOLZN47E/maxresdefault.jpg)](https://www.youtube.com/watch?v=BlsxOLZN47E)
 
-## Screenshots
-
-**Landing page** — live buildability stats up front, not marketing copy alone.
-
-![Landing page](docs/screenshots/landing-hero.png)
-
-**Dashboard overview** — which build needs attention today, on one dial.
-
-![Dashboard overview](docs/screenshots/dashboard-overview.png)
-
-**Build decision** — buildable units, the bottleneck part, and why.
-
-![Build decision](docs/screenshots/build-decision.png)
-
-**Run cost and coverage** — cheapest achievable price per part, coverage and bottleneck ranking charted.
-
-![Build cost and charts](docs/screenshots/build-cost-and-charts.png)
-
-**BOM buildability** — every part in the build, sorted by production impact.
-
-![BOM buildability table](docs/screenshots/bom-buildability.png)
-
-**Source comparison** — regions never combined into one number; each source's stock, price and lead time stays separate.
-
-![Source comparison](docs/screenshots/source-comparison.png)
-
-**Price break curves** — unit price by order quantity, per supplier.
-
-![Price break curves](docs/screenshots/price-break-curves.png)
-
-**Cross-supplier price comparison** — the same part priced across every supplier that carries it, cheapest highlighted.
-
-![Price comparison across suppliers](docs/screenshots/price-comparison.png)
-
 ## Example structured output
 
 Raw collector output (pre-normalization), one file per source, each captured from a real
@@ -440,3 +406,37 @@ a price table).
 Stock, currency and lead time are unaffected. The UI renders an empty price-break array as
 "—", never a wrong number, so this is a coverage gap rather than a correctness bug. A heal pass
 would be the fix.
+
+## Screenshots
+
+**Landing page** — live buildability stats up front, not marketing copy alone.
+
+![Landing page](docs/screenshots/landing-hero.png)
+
+**Dashboard overview** — which build needs attention today, on one dial.
+
+![Dashboard overview](docs/screenshots/dashboard-overview.png)
+
+**Build decision** — buildable units, the bottleneck part, and why.
+
+![Build decision](docs/screenshots/build-decision.png)
+
+**Run cost and coverage** — cheapest achievable price per part, coverage and bottleneck ranking charted.
+
+![Build cost and charts](docs/screenshots/build-cost-and-charts.png)
+
+**BOM buildability** — every part in the build, sorted by production impact.
+
+![BOM buildability table](docs/screenshots/bom-buildability.png)
+
+**Source comparison** — regions never combined into one number; each source's stock, price and lead time stays separate.
+
+![Source comparison](docs/screenshots/source-comparison.png)
+
+**Price break curves** — unit price by order quantity, per supplier.
+
+![Price break curves](docs/screenshots/price-break-curves.png)
+
+**Cross-supplier price comparison** — the same part priced across every supplier that carries it, cheapest highlighted.
+
+![Price comparison across suppliers](docs/screenshots/price-comparison.png)
