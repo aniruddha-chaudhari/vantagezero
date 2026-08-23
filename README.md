@@ -208,27 +208,6 @@ picked by preference.
 Stock is never summed across regions. A part in a UK warehouse isn't allocatable to an Indian
 build, so every aggregate is labelled "observed public stock across tracked regional sites."
 
-## Why not a pre-built scraper?
-
-Bright Data ships 800+ prebuilt scrapers. None cover B2B component distributors — those are
-trade catalogs, not consumer e-commerce.
-
-More importantly, none extract the fields this project needs: **incoming quantity** (distinct
-from in-stock), **manufacturer standard lead time**, **price breaks at a specific BOM
-quantity**, and **lifecycle status** (marketing status, production status, longevity
-commitment).
-
-Each of the five collectors was built with `bdata scraper create` against one exact
-product-detail-page URL, verified live on the Web Unlocker first.
-
-## Terminal / app boundary
-
-The app never creates, prompts, or heals a collector. That happens from the terminal
-(`bdata scraper create` / `heal` / `approve`), like any other piece of infrastructure.
-
-The app only *triggers a run* of an existing collector and *reads* the result. This keeps
-"Bright Data collector" and "business data" as two separate concerns.
-
 ## Data pipeline
 
 ```
