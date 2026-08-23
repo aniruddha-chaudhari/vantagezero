@@ -30,7 +30,7 @@ resolve to one of three outcomes: **approve, reject, or escalate.**
 
 ### Demo video
 
-[![Watch the demo](https://img.youtube.com/vi/BlsxOLZN47E/maxresdefault.jpg)](https://www.youtube.com/watch?v=BlsxOLZN47E)
+[![Watch the demo](https://img.youtube.com/vi/BlsxOLZN47E/maxresdefault.jpg?refresh=1)](https://www.youtube.com/watch?v=BlsxOLZN47E)
 
 ## Example structured output
 
