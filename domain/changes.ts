@@ -1,3 +1,5 @@
+import { canonicalLifecycleStatus } from "./risk";
+
 export type ChangeSeverity = "low" | "warning" | "medium" | "high" | "critical";
 
 /**
@@ -85,12 +87,20 @@ export interface LifecycleSnapshot {
   marketingStatus: string;
 }
 
+/**
+ * The decline axis only. PREVIEW is scored as a risk (see LIFECYCLE_RISK in risk.ts) but is
+ * deliberately not a member here: it precedes ACTIVE, so including it would make the normal
+ * Preview -> Active release read as a *worsening* and fire a false alert. Transitions into
+ * or out of Preview index as -1 and raise nothing, which is the intended behaviour.
+ */
 const LIFECYCLE_ORDER = ["ACTIVE", "NRND", "LAST_TIME_BUY", "OBSOLETE"];
 
 export function detectLifecycleChanges(prev: LifecycleSnapshot | null, curr: LifecycleSnapshot): ChangeEvent[] {
   if (!prev) return [];
-  const prevIdx = LIFECYCLE_ORDER.indexOf(prev.marketingStatus.toUpperCase());
-  const currIdx = LIFECYCLE_ORDER.indexOf(curr.marketingStatus.toUpperCase());
+  // Same token/display-string bridge lifecycleRisk() uses - without it a move into
+  // "Last Time Buy" indexes as -1 and never raises a lifecycle_worsened event at all.
+  const prevIdx = LIFECYCLE_ORDER.indexOf(canonicalLifecycleStatus(prev.marketingStatus));
+  const currIdx = LIFECYCLE_ORDER.indexOf(canonicalLifecycleStatus(curr.marketingStatus));
   if (prevIdx === -1 || currIdx === -1 || currIdx <= prevIdx) return [];
 
   return [

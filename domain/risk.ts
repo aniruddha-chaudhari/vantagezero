@@ -1,6 +1,16 @@
 export type RiskLevel = "low" | "medium" | "high" | "critical" | "unknown";
 
+/**
+ * ACTIVE -> NRND -> LAST_TIME_BUY -> OBSOLETE is a monotonic decline. PREVIEW is not on that
+ * axis at all: it's pre-Active, and it resolves *upward* as the part reaches volume
+ * production. It still scores as a real risk rather than "unknown" - for a buildability
+ * question ("how many units can I build today") a part that cannot yet be bought in volume
+ * constrains the build as hard as one in its final-order window, which is why it sits at
+ * "high" rather than NRND's "medium". It is deliberately absent from LIFECYCLE_ORDER in
+ * changes.ts - see the note there.
+ */
 const LIFECYCLE_RISK: Record<string, RiskLevel> = {
+  PREVIEW: "high",
   ACTIVE: "low",
   NRND: "medium",
   LAST_TIME_BUY: "high",
@@ -8,12 +18,23 @@ const LIFECYCLE_RISK: Record<string, RiskLevel> = {
 };
 
 /**
+ * Collectors store a manufacturer's own display string ("Last Time Buy"), which is what the
+ * UI renders - the keys above are tokens. Uppercasing alone is not enough to bridge the two:
+ * "Last Time Buy".toUpperCase() is "LAST TIME BUY", which misses LAST_TIME_BUY and silently
+ * degrades the highest-urgency pre-obsolete state to "unknown". Every lookup against a
+ * lifecycle table goes through here so the two representations can't drift apart again.
+ */
+export function canonicalLifecycleStatus(marketingStatus: string): string {
+  return marketingStatus.trim().toUpperCase().replace(/[\s-]+/g, "_");
+}
+
+/**
  * A missing/unrecognized marketing status is a data-quality gap, never a lifecycle
  * verdict - it renders "unknown", not a silently safe-looking "low" or alarming "critical".
  */
 export function lifecycleRisk(marketingStatus: string | null): RiskLevel {
   if (!marketingStatus) return "unknown";
-  return LIFECYCLE_RISK[marketingStatus.toUpperCase()] ?? "unknown";
+  return LIFECYCLE_RISK[canonicalLifecycleStatus(marketingStatus)] ?? "unknown";
 }
 
 export function leadTimePressure(weeks: number | null): RiskLevel {

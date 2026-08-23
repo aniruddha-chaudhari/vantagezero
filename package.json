@@ -12,6 +12,7 @@
     "db:studio": "drizzle-kit studio",
     "ingest": "tsx --env-file=.env.local scripts/ingest.ts",
     "seed:source": "tsx --env-file=.env.local scripts/seed-source-target.ts",
+    "test": "tsx --test domain/*.test.ts",
     "test:gates": "tsx --test domain/gates.test.ts",
     "heal": "tsx --env-file=.env.local scripts/heal-loop.ts",
     "heal:check": "tsx --env-file=.env.local scripts/heal-check.ts"
