@@ -28,6 +28,8 @@ PostgreSQL → dashboard.
 The self-healing gates feed back into **both** the scrapers and the validation step, and
 resolve to one of three outcomes: **approve, reject, or escalate.**
 
+### Demo video
+
 [![Watch the demo](https://img.youtube.com/vi/BlsxOLZN47E/maxresdefault.jpg)](https://www.youtube.com/watch?v=BlsxOLZN47E)
 
 ## Example structured output
