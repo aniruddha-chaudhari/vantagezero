@@ -251,6 +251,43 @@ export function buildHealRequest(url: string, prompt: string) {
   return { prompt, custom_input: [{ url }] };
 }
 
+const TERMINAL_REFACTOR_STATUSES = ["done", "failed", "error", "cancelled"];
+
+/** Single, unmodified read of a collector's current refactor job - used to check *which*
+ * job (by `id`) is sitting on a collector before acting on it, so a caller can tell a fresh
+ * job apart from one left over from an earlier or overlapping heal attempt. */
+async function fetchRefactorProgress(collectorId: string, headers: Record<string, string>): Promise<HealProgress> {
+  const url = `${API_BASE}/dca/collectors/${encodeURIComponent(collectorId)}/refactor_template/progress`;
+  const res = await fetch(url, { headers });
+  const text = await res.text();
+  if (!res.ok) {
+    throw new Error(
+      `Failed to read Bright Data self-healing progress for collector ${collectorId}: ${res.status} ${text.slice(0, 500)}`,
+    );
+  }
+  try {
+    return JSON.parse(text) as HealProgress;
+  } catch {
+    throw new Error(
+      `Bright Data self-healing progress for collector ${collectorId} was not valid JSON: ${text.slice(0, 500)}`,
+    );
+  }
+}
+
+/** Polls a collector's refactor job to its next gate or terminal state. */
+async function pollRefactorProgress(collectorId: string, headers: Record<string, string>): Promise<HealProgress> {
+  while (true) {
+    const progress = await fetchRefactorProgress(collectorId, headers);
+    if (progress.status === "pending_answer") {
+      return { ...progress, status: "awaiting_approval" };
+    }
+    if (TERMINAL_REFACTOR_STATUSES.includes(progress.status ?? "")) {
+      return progress;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+  }
+}
+
 async function runHealAttempt(
   collectorId: string,
   url: string,
@@ -273,36 +310,7 @@ async function runHealAttempt(
     );
   }
 
-  const progressUrl = `${endpoint}/progress`;
-  while (true) {
-    const progressResponse = await fetch(progressUrl, { headers });
-    const progressText = await progressResponse.text();
-    if (!progressResponse.ok) {
-      throw new Error(
-        `Failed to poll Bright Data self-healing for collector ${collectorId}: ` +
-          `${progressResponse.status} ${redactKey(progressText.slice(0, 500), key)}`,
-      );
-    }
-
-    let progress: HealProgress;
-    try {
-      progress = JSON.parse(progressText) as HealProgress;
-    } catch {
-      throw new Error(
-        `Bright Data self-healing progress for collector ${collectorId} was not valid JSON: ` +
-          progressText.slice(0, 500),
-      );
-    }
-
-    if (progress.status === "pending_answer") {
-      return { ...progress, status: "awaiting_approval" };
-    }
-    if (["done", "failed", "error", "cancelled"].includes(progress.status ?? "")) {
-      return progress;
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, 1_000));
-  }
+  return pollRefactorProgress(collectorId, headers);
 }
 
 /**
@@ -337,22 +345,70 @@ export async function healScraper(collectorId: string, url: string, prompt: stri
 }
 
 /**
+ * Reads whichever refactor job currently sits on a collector - callers that don't already
+ * hold a `HealProgress` from `healScraper` (e.g. a human approving from the dashboard, well
+ * after the heal that produced it ran) use this to get the job `id` that `approveHeal`
+ * requires.
+ */
+export async function getCurrentHealJob(collectorId: string): Promise<HealProgress> {
+  const key = apiKey();
+  const headers = { Authorization: `Bearer ${key}`, "Content-Type": "application/json" };
+  return fetchRefactorProgress(collectorId, headers);
+}
+
+/**
  * Approves (or rejects) a heal that is awaiting approval.
  *
- * `autoSave` maps to the CLI's `--auto-save`, which is forwarded as `auto_save` on Bright
- * Data's resume-self-healing-job call. Without it, approving lets the paused job resume but
- * never persists the healed template to production - the collector reverts, the next cron
- * cycle re-breaks on the same selector, and the loop heals the identical break forever. It
- * only applies on approval, so it is never sent alongside `--reject`.
+ * `expectedJobId` must be the `id` of the exact refactor job that was gate-evaluated (from
+ * `healScraper`'s returned progress). Bright Data's resume call (`resume_automation_job`)
+ * takes no job id itself - it always acts on whatever job currently sits on the collector.
+ * If a second heal for the same collector has started since (an overlapping workflow run, a
+ * duplicate manual/demo re-take), that call would silently resume *that* job instead and
+ * report its state - including a stale `done`/`save_new_template` - as if it were the one
+ * this caller evaluated. Checking the id first turns that race into a loud, immediate error
+ * instead of a heal that looks approved but saved nothing for the incident it was meant to fix.
+ *
+ * `autoSave` is forwarded as `auto_save` on the resume call. Without it, approving lets the
+ * paused job resume but never persists the healed template to production - the collector
+ * reverts, the next cron cycle re-breaks on the same selector, and the loop heals the
+ * identical break forever. It only applies on approval, so it is never sent alongside reject.
  */
 export async function approveHeal(
   collectorId: string,
-  url: string,
+  expectedJobId: string,
   options: { reject?: boolean; autoSave?: boolean } = {},
-): Promise<unknown> {
-  const args = ["scraper", "approve", collectorId, "--url", url];
-  if (options.reject) args.push("--reject");
-  else if (options.autoSave) args.push("--auto-save");
-  const stdout = await runCli(args);
-  return JSON.parse(stdout);
+): Promise<HealProgress> {
+  const key = apiKey();
+  const headers = { Authorization: `Bearer ${key}`, "Content-Type": "application/json" };
+  const verb = options.reject ? "reject" : "approve";
+
+  const current = await fetchRefactorProgress(collectorId, headers);
+  if (current.id !== expectedJobId) {
+    throw new Error(
+      `Refusing to ${verb} heal job ${expectedJobId} on collector ${collectorId}: Bright Data now has a ` +
+        `different job (${current.id ?? "unknown"}, status ${current.status ?? "unknown"}) on this collector - ` +
+        `another heal run must have started against it since this one was evaluated.`,
+    );
+  }
+  if (current.status !== "pending_answer") {
+    throw new Error(
+      `Refusing to ${verb} heal job ${expectedJobId} on collector ${collectorId}: it is no longer awaiting ` +
+        `approval (status ${current.status ?? "unknown"}).`,
+    );
+  }
+
+  const approve = !options.reject;
+  const body = approve && options.autoSave ? { message: true, auto_save: true } : { message: approve };
+
+  const resumeUrl = `${API_BASE}/dca/collectors/${encodeURIComponent(collectorId)}/resume_automation_job`;
+  const resume = await fetch(resumeUrl, { method: "POST", headers, body: JSON.stringify(body) });
+  const resumeText = await resume.text();
+  if (!resume.ok) {
+    throw new Error(
+      `Failed to ${verb} Bright Data self-healing for collector ${collectorId}: ` +
+        `${resume.status} ${redactKey(resumeText.slice(0, 500), key)}`,
+    );
+  }
+
+  return pollRefactorProgress(collectorId, headers);
 }

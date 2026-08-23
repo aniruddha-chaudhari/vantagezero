@@ -1,6 +1,6 @@
 import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 
-import { approveHeal } from "@/brightdata/client";
+import { approveHeal, getCurrentHealJob } from "@/brightdata/client";
 import type { LastValidDistributorSnapshot, LastValidManufacturerSnapshot } from "@/brightdata/heal";
 import { ingestSourceTarget } from "@/brightdata/ingestion";
 import { db } from "@/db/client";
@@ -268,7 +268,9 @@ export async function approveIncidentHeal(incidentId: string, opts: { reject: bo
   if (!row) throw new Error(`incident ${incidentId} not found`);
   if (!row.target.collectorId) throw new Error("source target has no collector_id");
 
-  await approveHeal(row.target.collectorId, row.target.sourceUrl, { reject: opts.reject });
+  const currentJob = await getCurrentHealJob(row.target.collectorId);
+  if (!currentJob.id) throw new Error(`collector ${row.target.collectorId} has no heal job awaiting approval`);
+  await approveHeal(row.target.collectorId, currentJob.id, { reject: opts.reject });
 
   return resolveIncident(incidentId, {
     status: opts.reject ? "rejected" : "resolved",
