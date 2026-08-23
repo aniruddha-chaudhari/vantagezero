@@ -17,7 +17,7 @@ import type { ChangeEvent } from "@/domain/changes";
 import { detectLifecycleChanges, detectStockChanges } from "@/domain/changes";
 import { VantageValidationError } from "@/domain/errors";
 import { validateDistributorObservation, validateManufacturerObservation } from "@/domain/schemas";
-import { sendSlackAlert } from "@/lib/slack";
+import { sendSlackActivity, sendSlackAlert } from "@/lib/slack";
 
 type SourceTarget = InferSelectModel<typeof sourceTargets>;
 export type TriggeredBy = "manual" | "cron" | "judge" | "webhook";
@@ -51,6 +51,7 @@ async function failRun(target: SourceTarget, scrapeRunId: string, code: string, 
     notes: message,
   });
 
+  await sendSlackAlert(`⚠️ *Incident* — ${target.sourceName} / ${target.mpn}\n${message}`);
   return { sourceTargetId: target.id, mpn: target.mpn, supplier: target.sourceName, ok: false, detail: message };
 }
 
@@ -60,6 +61,12 @@ async function failRun(target: SourceTarget, scrapeRunId: string, code: string, 
  * never a fabricated zero. Shared by both entry points below so there is one implementation
  * of "is this payload trustworthy," not two - the only thing that differs between a CLI run
  * and a Scraper Studio webhook delivery is where `raw` came from, never what happens to it.
+ *
+ * Slack gets one line per scrape either way, but at two different tiers. An incident always
+ * alerts (sendSlackAlert); a success posts only when the opt-in activity feed is enabled
+ * (sendSlackActivity), because that one scales with catalog size and would burst-flood an
+ * `--all` cycle. Both are distinct from recordChangeEvents()'s alert, which fires only when
+ * a change is actually business-critical.
  */
 async function finalizeIngest(target: SourceTarget, scrapeRunId: string, raw: unknown): Promise<IngestResult> {
   try {
@@ -73,6 +80,7 @@ async function finalizeIngest(target: SourceTarget, scrapeRunId: string, raw: un
       .set({ status: "success", validationStatus: "valid", finishedAt: new Date() })
       .where(eq(scrapeRuns.id, scrapeRunId));
 
+    await sendSlackActivity(`✅ Scraped ${target.sourceName} / ${target.mpn} — ${detail}`);
     return { sourceTargetId: target.id, mpn: target.mpn, supplier: target.sourceName, ok: true, detail };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
