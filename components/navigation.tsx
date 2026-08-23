@@ -8,7 +8,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 const navLinks = [
   { name: "Product", href: "#product" },
   { name: "How it works", href: "#how-it-works" },
-  { name: "Demo", href: "#demo" },
+  { name: "Demo", href: "https://www.youtube.com/watch?v=BlsxOLZN47E" },
   { name: "GitHub", href: "https://github.com/aniruddha-chaudhari/vantagezero" },
 ];
 
@@ -50,8 +50,8 @@ export function Navigation() {
               <a
                 key={link.name}
                 href={link.href}
-                target={link.name === "GitHub" ? "_blank" : undefined}
-                rel={link.name === "GitHub" ? "noreferrer" : undefined}
+                target={link.name === "GitHub" || link.name === "Demo" ? "_blank" : undefined}
+                rel={link.name === "GitHub" || link.name === "Demo" ? "noreferrer" : undefined}
                 className="group relative text-sm font-medium tracking-[-0.015em] text-black/62 transition-colors duration-300 hover:text-black dark:text-white/62 dark:hover:text-white"
               >
                 {link.name}
@@ -105,8 +105,8 @@ export function Navigation() {
               <a
                 key={link.name}
                 href={link.href}
-                target={link.name === "GitHub" ? "_blank" : undefined}
-                rel={link.name === "GitHub" ? "noreferrer" : undefined}
+                target={link.name === "GitHub" || link.name === "Demo" ? "_blank" : undefined}
+                rel={link.name === "GitHub" || link.name === "Demo" ? "noreferrer" : undefined}
                 onClick={() => setIsMobileMenuOpen(false)}
                 className={`font-display text-5xl text-black transition-all duration-500 hover:text-black/55 dark:text-white dark:hover:text-white/55 ${
                   isMobileMenuOpen
