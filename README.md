@@ -1,7 +1,6 @@
 # Vantage
 
-**Live app: [vantagezero.vercel.app](https://vantagezero.vercel.app)** — no sign-up, no login.
-Built for the Bright Data **Scrape-Verse** hackathon.
+**Live app: [vantagezero.vercel.app](https://vantagezero.vercel.app)**
 
 A hardware team commits to 500 units. Vantage answers the question that decides whether that
 date holds: **how many can we actually build today, and which part stops us?**
