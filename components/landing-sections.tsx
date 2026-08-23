@@ -291,7 +291,7 @@ export function LandingSections() {
       <footer className="border-t border-white/10 bg-black px-6 py-8 text-white/64">
         <div className="mx-auto flex max-w-[1320px] flex-col gap-4 text-xs sm:flex-row sm:items-center sm:justify-between">
           <span>Vantage · Self-healing supply-chain intelligence</span>
-          <a href="https://github.com/aniruddha-chaudhari/vantage" target="_blank" rel="noreferrer" className="transition-colors hover:text-white">GitHub ↗</a>
+          <a href="https://github.com/aniruddha-chaudhari/vantagezero" target="_blank" rel="noreferrer" className="transition-colors hover:text-white">GitHub ↗</a>
         </div>
       </footer>
     </>

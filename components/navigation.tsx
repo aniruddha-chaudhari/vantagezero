@@ -9,7 +9,7 @@ const navLinks = [
   { name: "Product", href: "#product" },
   { name: "How it works", href: "#how-it-works" },
   { name: "Demo", href: "#demo" },
-  { name: "GitHub", href: "https://github.com/aniruddha-chaudhari/vantage" },
+  { name: "GitHub", href: "https://github.com/aniruddha-chaudhari/vantagezero" },
 ];
 
 export function Navigation() {
