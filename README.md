@@ -3,8 +3,6 @@
 **Live app: [vantagezero.vercel.app](https://vantagezero.vercel.app)** — no sign-up, no login.
 Built for the Bright Data **Scrape-Verse** hackathon.
 
-[![Watch the demo](https://img.youtube.com/vi/BlsxOLZN47E/maxresdefault.jpg)](https://www.youtube.com/watch?v=BlsxOLZN47E)
-
 A hardware team commits to 500 units. Vantage answers the question that decides whether that
 date holds: **how many can we actually build today, and which part stops us?**
 
@@ -30,6 +28,8 @@ PostgreSQL → dashboard.
 
 The self-healing gates feed back into **both** the scrapers and the validation step, and
 resolve to one of three outcomes: **approve, reject, or escalate.**
+
+[![Watch the demo](https://img.youtube.com/vi/BlsxOLZN47E/maxresdefault.jpg)](https://www.youtube.com/watch?v=BlsxOLZN47E)
 
 ## Example structured output
 
