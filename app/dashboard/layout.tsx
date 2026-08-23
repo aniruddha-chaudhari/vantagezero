@@ -18,21 +18,23 @@ import {
 function AppSidebar() {
   return (
     <Sidebar>
-      <SidebarTrigger className="absolute right-2 top-3 z-10" />
       <SidebarHeader>
-        <Link href="/" className="px-2 py-1 text-xl font-semibold tracking-tight">
-          Vantage
-        </Link>
-        <div className="mt-3 rounded-lg border border-dashed p-3">
-          <div className="flex items-center gap-3">
-            <div className="grid size-8 place-items-center rounded-md bg-primary font-mono text-[11px] font-semibold text-primary-foreground">
-              V
+        <SidebarTrigger />
+        <div className="group-data-[state=collapsed]/sidebar:hidden">
+          <Link href="/" className="px-2 py-1 text-xl font-semibold tracking-tight">
+            Vantage
+          </Link>
+          <div className="mt-3 rounded-lg border border-dashed p-3">
+            <div className="flex items-center gap-3">
+              <div className="grid size-8 place-items-center rounded-md bg-primary font-mono text-[11px] font-semibold text-primary-foreground">
+                V
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs font-semibold">Your session</p>
+                <p className="mt-0.5 text-[10px] uppercase tracking-[0.08em] text-muted-foreground">Anonymous workspace</p>
+              </div>
+              <ChevronRight className="size-4 text-muted-foreground" />
             </div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-semibold">Your session</p>
-              <p className="mt-0.5 text-[10px] uppercase tracking-[0.08em] text-muted-foreground">Anonymous workspace</p>
-            </div>
-            <ChevronRight className="size-4 text-muted-foreground" />
           </div>
         </div>
       </SidebarHeader>

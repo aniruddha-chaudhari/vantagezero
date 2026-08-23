@@ -90,7 +90,7 @@ function SidebarHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       className={cn(
-        "flex flex-col gap-2 p-4 group-data-[state=collapsed]/sidebar:h-4 group-data-[state=collapsed]/sidebar:overflow-hidden group-data-[state=collapsed]/sidebar:p-0 group-data-[state=collapsed]/sidebar:[&>*]:hidden",
+        "flex flex-col gap-2 p-4 group-data-[state=collapsed]/sidebar:items-center group-data-[state=collapsed]/sidebar:p-2",
         className,
       )}
       {...props}
@@ -181,7 +181,7 @@ function SidebarTrigger({ className, onClick, ...props }: React.ComponentProps<t
     <Button
       variant="ghost"
       size="icon"
-      className={cn("shrink-0", className)}
+      className={cn("shrink-0 self-end group-data-[state=collapsed]/sidebar:self-center", className)}
       aria-label={state === "expanded" ? "Collapse sidebar" : "Expand sidebar"}
       onClick={(event) => {
         onClick?.(event);
