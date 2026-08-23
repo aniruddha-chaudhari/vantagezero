@@ -16,7 +16,7 @@ changes, the number moves. Vantage knows the difference.
 | **Live app** | https://vantagezero.vercel.app |
 | **Collectors** | 5 custom Scraper Studio collectors, 3 regions (UK, India, China) |
 | **Example output** | [jump ↓](#example-structured-output) — one real capture per source |
-| **Self-healing** | [jump ↓](#the-heal-loop-and-the-four-gates-day-5) — four gates, three outcomes |
+| **Self-healing** | [jump ↓](#the-heal-loop-and-the-four-gates) — four gates, three outcomes |
 
 ## Architecture
 
@@ -146,7 +146,7 @@ every schedule, trigger and integration referencing that collector keeps working
 One garbled field became four clean typed ones. Critically, the heal stops at
 `awaiting_approval` rather than shipping — that preview is exactly what the four gates in
 `domain/gates.ts` evaluate before anything is trusted (see
-"[The heal loop and the four gates](#the-heal-loop-and-the-four-gates-day-5)" below). A healed
+"[The heal loop and the four gates](#the-heal-loop-and-the-four-gates)" below). A healed
 preview always *looks* plausible; looking plausible is not evidence of being right.
 
 ## Screenshots
@@ -276,122 +276,40 @@ Required environment variables (`.env.local`, never committed):
 
 ## Current status
 
-Real numbers from the live database, not placeholders — regenerate any time with
-`npx tsx --env-file=.env.local scripts/stats.ts`:
+Real numbers from the live database — regenerate any time with `npx tsx --env-file=.env.local scripts/stats.ts`:
 
-- **5 custom Scraper Studio collectors**, all PDP scrapers: RS Online (24 tracked targets),
-  element14 (26), DigiKey India (24), LCSC (1), STMicroelectronics (2, manufacturer lifecycle)
-- **3 regions** — UK, India, China — each chosen by a live probe, not preference
-- **34 distinct MPNs** across 77 source targets, spanning MCU, regulator, PMIC, PHY, memory,
-  transceiver, connector, crystal, sensor, op-amp, MOSFET, ADC/DAC and protection categories
-- **40 distributor observations, 2 manufacturer lifecycle observations** stored (insert-only)
-- **93 collector runs** executed
-- **51 scraper incidents** opened automatically rather than writing bad data — wrong-variant
-  MPNs (a search matching `LM2596S-ADJ/NOPB` when `LM2596S-ADJ` was requested;
-  `DS18B20-EV` for `DS18B20`), missing required fields on pages that don't render them, and
-  one real bug in this repo's own RS normalizer (fixed; see `brightdata/normalize.ts`).
-  Never a fabricated zero.
-- 1 heal performed on the STMicroelectronics collector (see `brightdata/examples/st-lifecycle-heal.json`):
-  the preview came back clean, but the approved production run did not pick up the fix. Root
-  cause, found later: the approve call was missing `--auto-save`, so the healed template was
-  never persisted back to the collector - approving resumed the paused job but left the saved
-  template untouched. The flag is now wired through `approveHeal()` (see "Zero-touch without
-  removing the gate" below). The ST normalizer still works around the original garbled field
-  defensively, since the observations already on record were collected pre-fix
+- **5 collectors, 3 regions** (UK, India, China) — 34 distinct MPNs across 77 source targets
+- **40 distributor + 2 manufacturer lifecycle observations** stored, 93 collector runs
+- **51 scraper incidents** opened automatically instead of writing bad data — never a fabricated zero
+- **1 heal performed** (STMicroelectronics) — caught a missing `--auto-save` flag that was letting approved heals resume without persisting; fixed in `approveHeal()` (details in [the heal loop](#the-heal-loop-and-the-four-gates))
 
-Unresolved catalog MPNs are left unresolved rather than forced. They fail for legitimate,
-logged reasons — no matching organic search result, a page that doesn't render an exact stock
-count, or a variant-suffix mismatch the identity check correctly rejected. Re-running
-`scripts/resolve-catalog.ts` grows the catalog without touching what's already verified.
+Unresolved catalog MPNs stay unresolved rather than forced — logged, not guessed. Untracked
+parts get a **Search for this part** action instead (Bright Data's Web Search API, since both
+distributors' search pages are robots-disallowed), going through the same identity/shape
+validation as the seeded catalog.
 
-## Live MPN resolution: the catalog "floor" and the search "ceiling"
+## The heal loop and the four gates
 
-The seeded catalog (34 MPNs) is the floor — it resolves instantly because it's pre-verified.
+A heal regenerates a collector's extraction logic from a description of what broke. **The preview always *looks* plausible** — a healed selector can grab pin count instead of stock and still parse cleanly. So `domain/gates.ts` runs four checks before any heal is trusted:
 
-For anything else, untracked rows get a **Search for this part** action.
-
-We planned this as a "Search" type collector (keyword in, listings out), but both
-distributors' multi-result search pages are **robots-disallowed**: RS Online's
-`/*searchTerm=` is blocked outright, and element14's `/search?st=` is too. Only an exact
-single match redirects to an allowed product page.
-
-Rather than build against a disallowed path, live resolution uses Bright Data's Web Search
-API (`db/catalog.ts`).
-
-Either way, the pick goes through identical identity/shape validation. A wrong candidate — a
-`/NOPB` or `-T26A` suffix variant — is rejected with a reason, never silently accepted.
-
-## The heal loop and the four gates (Day 5)
-
-A heal regenerates a collector's extraction logic from a description of what broke.
-
-**The preview always *looks* plausible.** That's the trap. A healed selector can grab pin
-count instead of stock and still return a perfectly valid number that parses cleanly — and
-then go on to size a purchase order.
-
-So `domain/gates.ts` runs four checks before any heal is trusted:
-
-| Gate | Catches |
-|---|---|
-| Identity | The heal drifted to a different product on the page |
-| Shape | A heal that fixes one field while silently dropping another |
-| Continuity | An implausible jump from the last valid value (e.g. stock replaced by pin count) |
-| Collision | The healed value exactly equals a different field on the same page (stock === incoming) |
-
-**Identity and shape failures auto-reject** — they're unambiguously wrong.
-
-**Continuity and collision failures escalate to a human** — a plausible-but-wrong value can't
-be told apart from a real extreme change by magnitude alone.
-
-`brightdata/heal.ts` runs the healed preview through the same normalize-and-validate pipeline
-production ingestion uses, then these gates. One implementation of "is this heal trustworthy,"
-not two.
-
-Tests: `npm run test:gates` (`domain/gates.test.ts` covers all four gates).
-
-### Zero-touch without removing the gate
-
-Bright Data offers two ways to run a heal:
-
-- **`bdata scraper heal`** — pauses at `user_approval` for a person to eyeball the diff. Safe,
-  but doesn't run unattended.
-- **`heal --auto-approve`** — skips the gate entirely. Unattended, but ships any diff that
-  parses.
-
-Vantage takes a third option: **keep the gate, replace the reviewer.** The four gates hold the
-approval authority, so the loop is unattended *and* verified.
-
-| | Unattended | Verified |
+| Gate | Catches | On failure |
 |---|---|---|
-| `heal`, human approves in the UI | ✗ | ✓ (a person reads the diff) |
-| `heal --auto-approve` | ✓ | ✗ (any parseable diff ships) |
-| Vantage's gated loop | ✓ | ✓ (four gates decide; humans see only the ambiguous cases) |
+| Identity | Heal drifted to a different product | Auto-reject |
+| Shape | Fixed one field while dropping another | Auto-reject |
+| Continuity | Implausible jump from the last valid value | Escalate to human |
+| Collision | Healed value equals a different field on the page | Escalate to human |
 
-The three gate decisions map onto three genuinely distinct end states, not three log lines:
+Identity/shape are unambiguous, so they auto-reject. Continuity/collision can't be told apart
+from a real extreme change by magnitude alone, so they escalate to `/dashboard/sources`.
 
-| Decision | Action | Collector state |
-|---|---|---|
-| `auto_approve` | `approve --auto-save` | Healed template **persisted to production** |
-| `auto_reject` | `approve --reject`, reheal with a sharper prompt | Unchanged; job ended |
-| `escalate` | Left in `pending_answer`, Slack alert sent | Awaiting a human on `/dashboard/sources` |
+This keeps the loop **unattended and verified**, unlike Bright Data's own two options
+(`heal` waits on a human every time; `heal --auto-approve` ships any diff that parses).
+`approve --auto-save` is what makes an `auto_approve` decision durable — without it, approving
+resumes the paused job but never persists the healed template, and the collector re-breaks on
+the next cron cycle. That's exactly what happened once with the STMicroelectronics collector
+before the flag was wired through `approveHeal()`.
 
-**`--auto-save` is what makes the approve path durable.** Without it, an approval resumes the
-paused job but never writes the healed template back to the collector.
-
-The fix works once, the collector reverts, and the next cron cycle re-breaks on the same
-selector — healing the identical break forever.
-
-That's exactly what bit the ST collector: the one heal in the counts above whose clean preview
-never reached production. Root cause was a missing flag, not a platform quirk.
-
-The read/write API surface for this (`GET /api/incidents/open`, `GET
-/api/observations/latest-valid`, `POST /api/incidents/[id]/resolve`) is bearer-token
-protected like the ingestion endpoint, and never calls `bdata scraper create/heal` itself -
-per the terminal/app boundary above, that orchestration (the actual CI heal loop and the
-live rehearsal) is driven from the coding-agent CLI, not from Vantage's own backend. The one
-exception is `POST /api/incidents/[id]/approve`: a human approving or rejecting an
-already-escalated incident from the **Source health** screen (`/dashboard/sources`) - acting
-on a decision, not authoring a scraper.
+Tests: `npm run test:gates` (`domain/gates.test.ts`).
 
 ## AI assistance disclosure
 
@@ -401,20 +319,10 @@ Built with an AI coding assistant (Claude Code) for scaffolding, components and 
 
 Vantage does **not** guarantee that:
 
-- Inventory is still available when a PO is placed
-- Distributor stock is globally allocatable
-- Lead-time text equals a delivery date
-- These distributors represent the whole market
+- Inventory is still available when a PO is placed, or that distributor stock is globally allocatable
+- Lead-time text equals a delivery date, or that these distributors represent the whole market
 - Production ships on component availability alone
+- Buildable-unit math accounts for minimum order quantity or order multiple (both are captured, but the math is plain floor division)
 
-Buildable-unit math is floor division and doesn't account for minimum order quantity or order
-multiple — though both are captured. Component images are hotlinked from the source, not
-rehosted.
-
-**Known gap:** the DigiKey India collector doesn't reliably extract price breaks on every page
-— a full table for `LM2596S-ADJ/NOPB`, an empty one for `STM32F407VGT6` (whose page does have
-a price table).
-
-Stock, currency and lead time are unaffected. The UI renders an empty price-break array as
-"—", never a wrong number, so this is a coverage gap rather than a correctness bug. A heal pass
-would be the fix.
+**Known gap:** DigiKey India doesn't reliably extract price breaks on every page — stock,
+currency and lead time are unaffected, and the UI shows "—" rather than a wrong number.
