@@ -312,7 +312,7 @@ async function runHealAttempt(
  * no draft or production version exists yet. Retry it once; never retry a pending approval,
  * cancellation, HTTP error, or a failure in an unknown stage.
  */
-export async function healScraper(collectorId: string, url: string, prompt: string): Promise<unknown> {
+export async function healScraper(collectorId: string, url: string, prompt: string): Promise<HealProgress> {
   const key = apiKey();
   const headers = { Authorization: `Bearer ${key}`, "Content-Type": "application/json" };
 
