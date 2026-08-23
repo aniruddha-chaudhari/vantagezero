@@ -395,29 +395,7 @@ on a decision, not authoring a scraper.
 
 ## AI assistance disclosure
 
-This project was built with an AI coding assistant (Claude Code), and the Bright Data
-collectors were created and healed by driving the `bdata` CLI from that same terminal — which
-is the workflow Scraper Studio is designed for.
-
-What the assistant did: scaffolding, React/Tailwind components, boilerplate, test cases, and
-drafting prose in this README.
-
-What I decided and can explain:
-
-- Which sources to use and why — each probed live, with the rejections documented above
-- The four heal gates and their decision rule, including why identity/shape auto-reject while
-  continuity/collision escalate
-- The per-source normalizer field mappings
-- The schema and its insert-only observation model
-- The rule that a failed validation opens an incident rather than writing a zero
-
-**Separately — an LLM at runtime.** The app uses Groq for two product features: the guided
-"Help me choose parts" flow and alternative-part suggestions.
-
-Both treat the model as untrusted. Every part it names is re-verified against the real tracked
-catalog before being labelled "tracked" (`domain/design.ts`, `domain/alternatives.ts`).
-
-**No scraped value is ever produced by an LLM.**
+Built with an AI coding assistant (Claude Code) for scaffolding, components and boilerplate; sourcing, gate logic, schema design and normalizer mappings were my calls. At runtime, Groq powers two assistive features ("Help me choose parts", alternative-part suggestions) — every part it names is re-verified against the tracked catalog. **No scraped value is ever produced by an LLM.**
 
 ## Limitations
 
